@@ -91,6 +91,15 @@ export function RunPage({ id }: { id: string }) {
   const agents = useMemo(() => [...new Set(events.map((e) => e.agentId))], [events]);
   const lines = useMemo(() => buildLines(timeline, agentFilter, selectedTask), [timeline, agentFilter, selectedTask]);
   const usage = useMemo(() => summariseUsage(events), [events]);
+  const working = useMemo(() => {
+    // Agents whose current turn has started but not ended.
+    const live = new Map<string, boolean>();
+    for (const e of events) {
+      if (e.type === "session-start") live.set(e.agentId, true);
+      else if (e.type === "session-end") live.set(e.agentId, false);
+    }
+    return [...live].filter(([, on]) => on).map(([id]) => id);
+  }, [events]);
 
   if (error) return <div className="p-6"><ErrorNote error={error} /></div>;
   if (!detail) return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
@@ -126,6 +135,13 @@ export function RunPage({ id }: { id: string }) {
             </Badge>
             <span>{MODES.find((m) => m.value === run.mode)?.label}</span>·<span>{project.name}</span>·<span>started {timeAgo(run.createdAt)}</span>
             {totalCost > 0 && <span>· ${totalCost.toFixed(2)} reported</span>}
+            {isActive && (
+              <span data-testid="agents-working">
+                · {working.length} agent{working.length === 1 ? "" : "s"} working
+                {run.mode === "swarm" ? ` (cap ${project.settings.concurrency})` : ""}
+                {working.length ? `: ${working.join(", ")}` : ""}
+              </span>
+            )}
           </span>
         }
         actions={
