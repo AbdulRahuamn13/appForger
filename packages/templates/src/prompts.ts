@@ -132,12 +132,21 @@ export interface CoderFeedback {
   policyViolations?: string[];
 }
 
-export function coderPrompt(task: Pick<Task, "title" | "description" | "files" | "area">, feedback?: CoderFeedback): string {
+export interface StoryContext {
+  /** Acceptance criteria from the story, one per line. */
+  acceptance?: string;
+  /** Path (relative to the agent's folder) of the approved story spec. */
+  specPath?: string;
+}
+
+export function coderPrompt(task: Pick<Task, "title" | "description" | "files" | "area">, feedback?: CoderFeedback, story?: StoryContext): string {
   const parts = [
     `## Task: ${task.title}`,
     task.description,
     "",
     `Area: ${task.area}.`,
+    story?.specPath ? `The approved plan for this story is in ${story.specPath}; follow it.` : "",
+    story?.acceptance?.trim() ? `Story acceptance criteria (your part must satisfy the relevant ones):\n${story.acceptance.trim()}` : "",
     task.files.length ? `You own these paths (stay inside them): ${task.files.join(", ")}` : "",
     "Read docs/SPEC.md and docs/openapi.yaml first if they exist.",
     "When done, reply with a short summary of what you changed and how you verified it. Do not commit.",
@@ -175,11 +184,14 @@ export function formatFeedback(feedback: CoderFeedback): string {
 
 export const REVIEW_OUTPUT_SCHEMA = `{"verdict": "approve" | "request-changes", "summary": "...", "issues": [{"severity": "blocker" | "major" | "minor" | "nit", "file": "path", "line": 12, "message": "..."}]}`;
 
-export function reviewerPrompt(task: Pick<Task, "title" | "description">, diff: string, maxDiffChars = 120_000): string {
+export function reviewerPrompt(task: Pick<Task, "title" | "description">, diff: string, maxDiffChars = 120_000, story?: StoryContext): string {
   return [
     `## Review the diff for task: ${task.title}`,
     task.description,
     "",
+    story?.acceptance?.trim()
+      ? `Story acceptance criteria — for each one this task covers, check that the diff really satisfies it, and raise a major issue if it doesn't:\n${story.acceptance.trim()}\n`
+      : "",
     "Check against docs/SPEC.md and docs/openapi.yaml (read them). You may read any file for context, but change nothing.",
     "Approve only if there are no blocker or major issues.",
     "",
@@ -251,4 +263,66 @@ export function nativeTeamPrompt(brief: string, teammates: number): string {
     "Start by writing docs/SPEC.md and docs/openapi.yaml yourself so every teammate builds against the same contract.",
     "Teammates must not edit the same files. When everyone is done, run the tests, then reply with a summary. Do not commit; AppForge reviews and merges the branch.",
   ].join("\n");
+}
+
+export interface PreviousPlan {
+  summary: string;
+  spec: string;
+  design?: string;
+  tasks: { key: string; title: string; description: string; area: string; dependsOn: string[]; files: string[] }[];
+}
+
+/**
+ * Plan a story without touching code. The reply uses tags so a long
+ * Markdown spec survives intact; tasks come as JSON.
+ */
+export function storyPlanPrompt(
+  story: { title: string; body: string; acceptance?: string },
+  opts: { maxTasks: number; hasImages: boolean; previous?: PreviousPlan; feedback?: string },
+): string {
+  const parts = [
+    `## Story: ${story.title}`,
+    story.body.trim(),
+    story.acceptance?.trim() ? `\n### Acceptance criteria\n${story.acceptance.trim()}` : "",
+    "",
+    "## Your job: plan only",
+    "Do NOT create or edit any files. Read the existing code, docs/ and .appforge/context/PROJECT_CONTEXT.md (history of earlier stories, decisions and logs) so the plan fits what already exists.",
+    "Then produce a plan the human will review, edit and approve before anything is built:",
+    "1. A spec: goal, data model changes, API endpoints (method, path, request, response, errors), UI screens and states, and testable acceptance criteria.",
+    opts.hasImages
+      ? "2. A design section: you have reference images. Describe colours (hex), typography, spacing, radii, layout per page and the components to build so coders can match them."
+      : "2. A design section only if the story has UI (layout and components).",
+    "3. Open questions or assumptions the human should confirm (empty if none).",
+    `4. At most ${opts.maxTasks} tasks, each independently buildable and testable. Keep backend and frontend separate. Give each task non-overlapping file ownership (globs relative to the project folder) and only add dependsOn where one task truly needs another merged first.`,
+  ];
+  if (opts.previous) {
+    parts.push(
+      "",
+      "## Previous plan (revise it)",
+      `Summary: ${opts.previous.summary}`,
+      "<previous-spec>",
+      opts.previous.spec,
+      "</previous-spec>",
+      `Previous tasks: ${JSON.stringify(opts.previous.tasks)}`,
+    );
+  }
+  if (opts.feedback?.trim()) parts.push("", "## Feedback from the human (address all of it)", opts.feedback.trim());
+  parts.push(
+    "",
+    "## Reply format (exactly)",
+    "<summary>One short paragraph.</summary>",
+    "<spec>",
+    "Markdown spec",
+    "</spec>",
+    "<design>",
+    "Markdown design notes, or leave empty",
+    "</design>",
+    "<questions>",
+    "- one question per line, or leave empty",
+    "</questions>",
+    "```json",
+    `{ "tasks": [ { "key": "short-kebab-id", "title": "Imperative title", "description": "What to build + acceptance criteria", "area": "backend" | "frontend" | "shared", "dependsOn": [], "files": ["backend/src/routes/todos/**"] } ] }`,
+    "```",
+  );
+  return parts.filter((p) => p !== "").join("\n");
 }

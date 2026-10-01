@@ -103,6 +103,22 @@ describe("GitRepo", () => {
     expect(existsSync(wt)).toBe(false);
   });
 
+  it("finds and reverts an AppForge merge", async () => {
+    const repo = await GitRepo.init(tmp);
+    const wt = path.join(tmp, ".appforge/worktrees/f");
+    await repo.createWorktree(wt, "appforge/r1/feature", "main");
+    await writeFile(path.join(wt, "feature.txt"), "new\n");
+    await new GitRepo(wt).commitAll("feature");
+    await repo.merge("appforge/r1/feature", "Merge appforge/r1/feature: Feature (AppForge)");
+    expect(existsSync(path.join(tmp, "feature.txt"))).toBe(true);
+    const sha = await repo.findMergeCommit("appforge/r1/feature");
+    expect(sha).toBeTruthy();
+    expect(await repo.findMergeCommit("appforge/r1/other")).toBeUndefined();
+    await repo.revert(sha as string, true);
+    expect(existsSync(path.join(tmp, "feature.txt"))).toBe(false);
+    expect((await repo.log(1))[0]?.message).toMatch(/^Revert/);
+  });
+
   it("reports merge conflicts", async () => {
     const repo = await GitRepo.init(tmp);
     await writeFile(path.join(tmp, "x.txt"), "base\n");

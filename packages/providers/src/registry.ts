@@ -1,4 +1,4 @@
-import type { AgentEventPayload, AgentSession, AuthStatus, ProviderAdapter, TurnResult } from "@appforge/core";
+import type { AgentEventPayload, AgentSession, AuthStatus, ProviderAdapter, TurnInput, TurnResult } from "@appforge/core";
 
 export class ProviderRegistry {
   private readonly adapters = new Map<string, ProviderAdapter>();
@@ -44,10 +44,11 @@ export async function runTurn(
   session: AgentSession,
   prompt: string,
   onEvent: (event: AgentEventPayload) => void = () => {},
+  input?: TurnInput,
 ): Promise<TurnResult> {
   const result: TurnResult = { status: "failed", text: "", events: [], inputTokens: 0, outputTokens: 0, costUsd: 0, rateLimited: false };
   const texts: string[] = [];
-  for await (const event of session.sendTask(prompt)) {
+  for await (const event of session.sendTask(prompt, input)) {
     result.events.push(event);
     onEvent(event);
     switch (event.type) {

@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { AgentEventPayload, AgentSession, AuthStatus, ProviderAdapter, RoleId, SessionOptions } from "@appforge/core";
+import type { AgentEventPayload, AgentSession, AuthStatus, ProviderAdapter, RoleId, SessionOptions, TurnInput } from "@appforge/core";
 import { newId } from "@appforge/core";
 import { Sandbox } from "@appforge/workspace";
 
@@ -12,6 +12,9 @@ export interface ScriptContext {
   turn: number;
   /** Global call counter across all sessions of this adapter. */
   call: number;
+  /** Reference images passed for this turn. */
+  images: string[];
+  systemPrompt: string;
 }
 
 export interface ScriptStep {
@@ -54,17 +57,17 @@ export class ScriptedAdapter implements ProviderAdapter {
     const sandbox = await Sandbox.create(options.cwd);
     let turn = 0;
     let stopped = false;
-    const next = (prompt: string): ScriptContext => {
-      const ctx: ScriptContext = { role: options.role, prompt, cwd: options.cwd, turn: turn++, call: this.calls++ };
+    const next = (prompt: string, images: string[]): ScriptContext => {
+      const ctx: ScriptContext = { role: options.role, prompt, cwd: options.cwd, turn: turn++, call: this.calls++, images, systemPrompt: options.systemPrompt };
       this.log.push(ctx);
       return ctx;
     };
     const script = this.script;
     return {
       id: newId("sc"),
-      async *sendTask(prompt: string): AsyncIterable<AgentEventPayload> {
+      async *sendTask(prompt: string, input?: TurnInput): AsyncIterable<AgentEventPayload> {
         stopped = false;
-        const ctx = next(prompt);
+        const ctx = next(prompt, input?.images ?? []);
         yield { type: "session-start", model: "scripted" };
         const step = await script(ctx);
         if (step.delayMs) await new Promise((r) => setTimeout(r, step.delayMs));

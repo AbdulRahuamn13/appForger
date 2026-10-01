@@ -3,7 +3,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { AgentEvent, Approval, Project, Run, RunLogEvent, RunStatus, Task } from "@appforge/core";
+import type { AgentEvent, Approval, Asset, Project, Run, RunLogEvent, RunStatus, Story, Task } from "@appforge/core";
 import { migrate } from "./migrations.ts";
 import * as schema from "./schema.ts";
 
@@ -11,6 +11,33 @@ type ProjectRow = typeof schema.projects.$inferSelect;
 type RunRow = typeof schema.runs.$inferSelect;
 type TaskRow = typeof schema.tasks.$inferSelect;
 type ApprovalRow = typeof schema.approvals.$inferSelect;
+type StoryRow = typeof schema.stories.$inferSelect;
+type AssetRow = typeof schema.assets.$inferSelect;
+
+function toStory(row: StoryRow): Story {
+  const story: Story = {
+    id: row.id,
+    projectId: row.projectId,
+    title: row.title,
+    body: row.body,
+    acceptance: row.acceptance,
+    status: row.status as Story["status"],
+    order: row.order,
+    images: parse(row.images, []),
+    planRunIds: parse(row.planRunIds, []),
+    runIds: parse(row.runIds, []),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+  if (row.plan) story.plan = parse(row.plan, undefined);
+  if (row.mode) story.mode = row.mode as Story["mode"];
+  if (row.outcome) story.outcome = row.outcome;
+  return story;
+}
+
+function toAsset(row: AssetRow): Asset {
+  return { id: row.id, projectId: row.projectId, name: row.name, mediaType: row.mediaType, size: row.size, createdAt: row.createdAt };
+}
 
 const parse = <T>(text: string | null | undefined, fallback: T): T => {
   if (!text) return fallback;
@@ -46,6 +73,7 @@ function toRun(row: RunRow): Run {
   };
   if (row.error) run.error = row.error;
   if (row.finishedAt) run.finishedAt = row.finishedAt;
+  if (row.storyId) run.storyId = row.storyId;
   return run;
 }
 
@@ -185,6 +213,7 @@ export class Store {
         id: run.id,
         projectId: run.projectId,
         mode: run.mode,
+        storyId: run.storyId ?? null,
         brief: run.brief,
         status: run.status,
         error: run.error ?? null,
@@ -319,6 +348,60 @@ export class Store {
 
   listApprovals(runId: string): Approval[] {
     return this.db.select().from(schema.approvals).where(eq(schema.approvals.runId, runId)).orderBy(asc(schema.approvals.createdAt)).all().map(toApproval);
+  }
+
+  // Stories
+  listStories(projectId: string): Story[] {
+    return this.db.select().from(schema.stories).where(eq(schema.stories.projectId, projectId)).orderBy(asc(schema.stories.order), asc(schema.stories.createdAt)).all().map(toStory);
+  }
+
+  getStory(id: string): Story | undefined {
+    const row = this.db.select().from(schema.stories).where(eq(schema.stories.id, id)).get();
+    return row ? toStory(row) : undefined;
+  }
+
+  upsertStory(story: Story): void {
+    const values = {
+      id: story.id,
+      projectId: story.projectId,
+      title: story.title,
+      body: story.body,
+      acceptance: story.acceptance,
+      status: story.status,
+      order: story.order,
+      images: JSON.stringify(story.images),
+      plan: story.plan ? JSON.stringify(story.plan) : null,
+      mode: story.mode ?? null,
+      planRunIds: JSON.stringify(story.planRunIds),
+      runIds: JSON.stringify(story.runIds),
+      outcome: story.outcome ?? null,
+      createdAt: story.createdAt,
+      updatedAt: story.updatedAt,
+    };
+    const { id: _id, createdAt: _c, projectId: _p, ...updates } = values;
+    this.db.insert(schema.stories).values(values).onConflictDoUpdate({ target: schema.stories.id, set: updates }).run();
+  }
+
+  deleteStory(id: string): void {
+    this.db.delete(schema.stories).where(eq(schema.stories.id, id)).run();
+  }
+
+  listRunsForStory(storyId: string): Run[] {
+    return this.db.select().from(schema.runs).where(eq(schema.runs.storyId, storyId)).orderBy(asc(schema.runs.createdAt)).all().map(toRun);
+  }
+
+  // Assets (metadata; bytes live in the storage backend)
+  insertAsset(asset: Asset): void {
+    this.db.insert(schema.assets).values(asset).run();
+  }
+
+  getAsset(id: string): Asset | undefined {
+    const row = this.db.select().from(schema.assets).where(eq(schema.assets.id, id)).get();
+    return row ? toAsset(row) : undefined;
+  }
+
+  deleteAsset(id: string): void {
+    this.db.delete(schema.assets).where(eq(schema.assets.id, id)).run();
   }
 
   // Settings (non-secret)

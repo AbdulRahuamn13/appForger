@@ -1,5 +1,7 @@
 import type {
   AgentEvent,
+  RoleId,
+  StoryPlan,
   Approval,
   Project,
   Run,
@@ -70,6 +72,34 @@ export interface StartRunInput {
   brief: string;
   /** Single / Claude-native modes in a two-repo project: which repo to work in. */
   repo?: string;
+  storyId?: string;
+  /** Story acceptance criteria (given to coders and checked by the reviewer). */
+  acceptance?: string;
+  /** Execution modes: the approved plan to build (skips the Architect). */
+  plan?: StoryPlan;
+  /** Plan mode: revise this plan... */
+  previousPlan?: StoryPlan;
+  /** ...using this feedback from the human. */
+  feedback?: string;
+}
+
+/**
+ * Supplies project knowledge to agents: skills, project memory and history,
+ * earlier logs and reference images. Implemented by the server on top of its
+ * storage; the orchestrator just calls it before every agent turn.
+ */
+export interface ContextProvider {
+  /** Extra system-prompt text for this role (skills, where to find project history). */
+  systemAddendum(project: Project, role: RoleId, run: Run): Promise<string>;
+  /** Write `.appforge/context/` into the agent's folder; returns reference image paths there. */
+  prepare(project: Project, run: Run, cwd: string): Promise<{ images: string[] }>;
+}
+
+export interface RunHooks {
+  /** Plan mode finished: the parsed plan for review. */
+  onPlanReady?(run: Run, plan: StoryPlan, warnings: string[]): Promise<void> | void;
+  /** Any run reached succeeded/failed/cancelled. */
+  onRunFinished?(run: Run): Promise<void> | void;
 }
 
 /** Persisted per-run checkpoint, used to resume after a restart. */
@@ -80,4 +110,10 @@ export interface RunState {
   e2eFixRounds?: number;
   /** Repo chosen for single / Claude-native runs. */
   repo?: string;
+  acceptance?: string;
+  plan?: StoryPlan;
+  previousPlan?: StoryPlan;
+  feedback?: string;
+  /** Where the approved story spec was committed (relative to each repo). */
+  specPath?: string;
 }

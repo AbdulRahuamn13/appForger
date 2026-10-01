@@ -1,7 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { AgentEventPayload, AgentSession, AuthStatus, ProviderAdapter, SessionOptions } from "@appforge/core";
+import type { AgentEventPayload, AgentSession, AuthStatus, ProviderAdapter, SessionOptions, TurnInput } from "@appforge/core";
 import { newId } from "@appforge/core";
 import { Sandbox } from "@appforge/workspace";
+import { loadImages } from "./images.ts";
 import type { SecretStore } from "./secrets.ts";
 import { runTool, toolsFor, type ToolSpec } from "./tools.ts";
 
@@ -76,10 +77,19 @@ class ClaudeApiSession implements AgentSession {
     this.tools = toolsFor(options.access);
   }
 
-  async *sendTask(prompt: string): AsyncIterable<AgentEventPayload> {
+  async *sendTask(prompt: string, turn?: TurnInput): AsyncIterable<AgentEventPayload> {
     const abort = new AbortController();
     this.abort = abort;
-    this.messages.push({ role: "user", content: prompt });
+    const images = await loadImages(turn?.images);
+    this.messages.push({
+      role: "user",
+      content: images.length
+        ? [
+            { type: "text", text: prompt },
+            ...images.map((img) => ({ type: "image" as const, source: { type: "base64" as const, media_type: img.mediaType, data: img.base64 } })),
+          ]
+        : prompt,
+    });
     yield { type: "session-start", model: this.model };
     const maxTurns = this.options.maxTurns ?? 80;
     let lastText = "";

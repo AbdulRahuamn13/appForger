@@ -292,6 +292,27 @@ export class GitRepo {
     return this.headSha();
   }
 
+  /** The merge commit AppForge made for `branch` (newest first), if any. */
+  async findMergeCommit(branch: string): Promise<string | undefined> {
+    const out = await this.git.raw(["log", "--merges", "--fixed-strings", `--grep=Merge ${branch}:`, "--format=%H"]);
+    return out.split("\n").find(Boolean);
+  }
+
+  /** Revert a commit (a merge reverts to its first parent). Aborts and throws on conflicts. */
+  async revert(sha: string, isMerge: boolean): Promise<string> {
+    try {
+      await this.git.raw(["revert", "--no-edit", ...(isMerge ? ["-m", "1"] : []), sha]);
+    } catch (err) {
+      await this.git.raw(["revert", "--abort"]).catch(() => undefined);
+      throw new Error(`Could not revert ${sha.slice(0, 8)}: ${(err as Error).message.split("\n")[0]}`, { cause: err });
+    }
+    if (await this.conflictedFiles().then((f) => f.length)) {
+      await this.git.raw(["revert", "--abort"]).catch(() => undefined);
+      throw new Error(`Reverting ${sha.slice(0, 8)} conflicts with later changes`);
+    }
+    return this.headSha();
+  }
+
   async log(max = 20): Promise<{ sha: string; message: string; date: string }[]> {
     const log = await this.git.log({ maxCount: max });
     return log.all.map((c) => ({ sha: c.hash, message: c.message, date: c.date }));

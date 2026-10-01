@@ -1,4 +1,4 @@
-import type { Approval, Project, RoleId, Run, Task, TestReport } from "./domain.ts";
+import type { Approval, Project, RoleId, Run, Story, Task, TestReport } from "./domain.ts";
 
 /**
  * What a provider adapter emits while an agent works. Adapters translate their
@@ -53,7 +53,20 @@ export type ServerMessage =
   | { kind: "run-log"; log: RunLogEvent }
   | { kind: "approval-updated"; approval: Approval }
   | { kind: "test-report"; runId: string; taskId?: string; report: TestReport }
-  | { kind: "playground-event"; playgroundId: string; payload: AgentEventPayload };
+  | { kind: "playground-event"; playgroundId: string; payload: AgentEventPayload }
+  | { kind: "story-updated"; story: Story }
+  | { kind: "story-deleted"; storyId: string; projectId: string }
+  | { kind: "log-saved"; projectId: string; name: string }
+  | { kind: "preview-updated"; projectId: string; preview: PreviewState };
+
+export interface PreviewState {
+  status: "stopped" | "starting" | "running" | "failed";
+  frontendUrl?: string;
+  backendUrl?: string;
+  error?: string;
+  /** Recent dev-server output. */
+  output: string;
+}
 
 /** Messages the UI can send over the socket. Mutations go through REST. */
 export type ClientMessage = { kind: "subscribe"; runId?: string } | { kind: "ping" };

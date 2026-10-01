@@ -1,9 +1,10 @@
 import path from "node:path";
 import { query, type HookCallback, type PermissionResult, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { execa } from "execa";
-import type { AgentEventPayload, AgentSession, AuthStatus, ProviderAdapter, SessionOptions } from "@appforge/core";
+import type { AgentEventPayload, AgentSession, AuthStatus, ProviderAdapter, SessionOptions, TurnInput } from "@appforge/core";
 import { newId, truncate } from "@appforge/core";
 import { canWrite, Sandbox } from "@appforge/workspace";
+import { imageHint } from "./images.ts";
 
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 const PATH_KEYS = ["file_path", "notebook_path", "path"];
@@ -97,7 +98,9 @@ class ClaudeCodeSession implements AgentSession {
     return undefined;
   }
 
-  async *sendTask(prompt: string): AsyncIterable<AgentEventPayload> {
+  async *sendTask(task: string, turn?: TurnInput): AsyncIterable<AgentEventPayload> {
+    // Claude Code reads images natively with its Read tool.
+    const prompt = task + imageHint(turn?.images, this.options.cwd);
     const abort = new AbortController();
     this.abort = abort;
     const { options } = this;

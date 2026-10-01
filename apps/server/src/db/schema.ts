@@ -19,6 +19,7 @@ export const runs = sqliteTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     mode: text("mode").notNull(),
+    storyId: text("story_id"),
     brief: text("brief").notNull(),
     status: text("status").notNull(),
     error: text("error"),
@@ -111,3 +112,42 @@ export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
 });
+
+export const stories = sqliteTable(
+  "stories",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    acceptance: text("acceptance").notNull().default(""),
+    status: text("status").notNull(),
+    order: integer("sort_order").notNull().default(0),
+    images: text("images").notNull().default("[]"),
+    plan: text("plan"),
+    mode: text("mode"),
+    planRunIds: text("plan_run_ids").notNull().default("[]"),
+    runIds: text("run_ids").notNull().default("[]"),
+    outcome: text("outcome"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("stories_project_idx").on(t.projectId)],
+);
+
+export const assets = sqliteTable(
+  "assets",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    mediaType: text("media_type").notNull(),
+    size: integer("size").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("assets_project_idx").on(t.projectId)],
+);

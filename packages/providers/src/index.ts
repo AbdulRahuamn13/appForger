@@ -10,6 +10,7 @@ export * from "./claude-api.ts";
 export * from "./claude-code.ts";
 export * from "./codex-cli.ts";
 export * from "./demo.ts";
+export * from "./images.ts";
 export * from "./openai-api.ts";
 export * from "./registry.ts";
 export * from "./scripted.ts";

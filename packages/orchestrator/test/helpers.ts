@@ -6,7 +6,7 @@ import { defaultProjectSettings, newId, nowIso } from "@appforge/core";
 import { ProviderRegistry, ScriptedAdapter, type Script } from "@appforge/providers";
 import { reposForShape } from "@appforge/templates";
 import { GitRepo } from "@appforge/workspace";
-import { Orchestrator, type OrchestratorStore, type TestingService } from "../src/index.ts";
+import { Orchestrator, type ContextProvider, type OrchestratorStore, type RunHooks, type TestingService } from "../src/index.ts";
 
 export class MemoryStore implements OrchestratorStore {
   projects = new Map<string, Project>();
@@ -80,7 +80,15 @@ export interface Harness {
 
 export async function harness(
   script: Script,
-  options: { shape?: Project["shape"]; settings?: Partial<Project["settings"]>; testing?: TestingService; providerId?: string; extraAdapters?: ScriptedAdapter[] } = {},
+  options: {
+    shape?: Project["shape"];
+    settings?: Partial<Project["settings"]>;
+    testing?: TestingService;
+    providerId?: string;
+    extraAdapters?: ScriptedAdapter[];
+    context?: ContextProvider;
+    hooks?: RunHooks;
+  } = {},
 ): Promise<Harness> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "appforge-orch-"));
   const shape = options.shape ?? "monorepo";
@@ -127,6 +135,8 @@ export async function harness(
       for (const l of listeners) l(m);
     },
     ...(options.testing ? { testing: options.testing } : {}),
+    ...(options.context ? { context: options.context } : {}),
+    ...(options.hooks ? { hooks: options.hooks } : {}),
   });
   const next = (predicate: (m: ServerMessage) => boolean, timeoutMs = 15_000) =>
     new Promise<ServerMessage>((resolve, reject) => {

@@ -91,6 +91,38 @@ const MIGRATIONS: string[] = [
     value TEXT NOT NULL
   );
   `,
+  // 2: stories (plan first, then execute), reference images, runs linked to stories
+  `
+  ALTER TABLE runs ADD COLUMN story_id TEXT;
+  CREATE INDEX runs_story_idx ON runs(story_id);
+  CREATE TABLE stories (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    acceptance TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    images TEXT NOT NULL DEFAULT '[]',
+    plan TEXT,
+    mode TEXT,
+    plan_run_ids TEXT NOT NULL DEFAULT '[]',
+    run_ids TEXT NOT NULL DEFAULT '[]',
+    outcome TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX stories_project_idx ON stories(project_id);
+  CREATE TABLE assets (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    media_type TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX assets_project_idx ON assets(project_id);
+  `,
 ];
 
 export function migrate(sqlite: Database.Database): void {

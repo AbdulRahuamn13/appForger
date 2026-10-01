@@ -1,13 +1,15 @@
 import { Entry } from "@napi-rs/keyring";
 
 /** Names of the API keys AppForge can store. Subscription logins are never stored. */
-export const SECRET_NAMES = ["anthropic-api-key", "openai-api-key"] as const;
+export const SECRET_NAMES = ["anthropic-api-key", "openai-api-key", "s3-access-key-id", "s3-secret-access-key"] as const;
 export type SecretName = (typeof SECRET_NAMES)[number];
 
 /** Environment variables accepted as a read-only fallback (useful where no keychain exists). */
 export const SECRET_ENV: Record<SecretName, string> = {
   "anthropic-api-key": "ANTHROPIC_API_KEY",
   "openai-api-key": "OPENAI_API_KEY",
+  "s3-access-key-id": "AWS_ACCESS_KEY_ID",
+  "s3-secret-access-key": "AWS_SECRET_ACCESS_KEY",
 };
 
 export interface SecretStatus {

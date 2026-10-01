@@ -1,6 +1,7 @@
 import { execa, type ResultPromise } from "execa";
-import type { AgentEventPayload, AgentSession, AuthStatus, ProviderAdapter, SessionOptions } from "@appforge/core";
+import type { AgentEventPayload, AgentSession, AuthStatus, ProviderAdapter, SessionOptions, TurnInput } from "@appforge/core";
 import { isRateLimitMessage, isRecord, newId, truncate } from "@appforge/core";
+import { imageMediaType } from "./images.ts";
 
 /**
  * Drives the OpenAI Codex CLI headlessly (`codex exec --json`), signed in with
@@ -58,7 +59,7 @@ class CodexSession implements AgentSession {
     private readonly binary: string,
   ) {}
 
-  private args(resume: boolean): string[] {
+  private args(resume: boolean, images: string[]): string[] {
     const { options } = this;
     const args = [
       "exec",
@@ -70,13 +71,15 @@ class CodexSession implements AgentSession {
       options.access.mode === "read-only" ? "read-only" : "workspace-write",
     ];
     if (options.model) args.push("-m", options.model);
-    if (resume && this.threadId) args.push("resume", this.threadId, "-");
-    else args.push("-");
+    const imageArgs = images.flatMap((img) => ["-i", img]);
+    if (resume && this.threadId) args.push("resume", this.threadId, ...imageArgs, "-");
+    else args.push(...imageArgs, "-");
     return args;
   }
 
-  async *sendTask(prompt: string): AsyncIterable<AgentEventPayload> {
+  async *sendTask(prompt: string, turn?: TurnInput): AsyncIterable<AgentEventPayload> {
     this.stopped = false;
+    const images = (turn?.images ?? []).filter((p) => imageMediaType(p));
     const resume = Boolean(this.threadId);
     // `codex exec` has no system-prompt flag, so instructions lead the first prompt.
     const input = resume ? prompt : `# Instructions\n${this.options.systemPrompt}\n\n# Task\n${prompt}`;
@@ -85,7 +88,7 @@ class CodexSession implements AgentSession {
     let failed = false;
     let sawCompletion = false;
 
-    const child = execa(this.binary, this.args(resume), {
+    const child = execa(this.binary, this.args(resume, images), {
       cwd: this.options.cwd,
       input,
       reject: false,

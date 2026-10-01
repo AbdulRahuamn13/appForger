@@ -163,7 +163,8 @@ export class ProjectTesting implements TestingService {
 
   // ───────── dev servers for E2E ─────────
 
-  private async startApp(project: Project, request: E2ETestRequest): Promise<RunningApp> {
+  /** Start backend + frontend dev servers on free ports (used for E2E and the live preview). */
+  async startApp(project: Project, request: E2ETestRequest & { onOutput?: (name: string, chunk: string) => void }): Promise<RunningApp> {
     const stack = getStack(project.stackId);
     const log = request.log;
     const started: { stop(): Promise<void> }[] = [];
@@ -188,7 +189,14 @@ export class ProjectTesting implements TestingService {
     }
   }
 
-  private async startServer(name: string, part: StackPart, dir: string, port: number, backendUrl: string, request: E2ETestRequest): Promise<{ stop(): Promise<void> }> {
+  private async startServer(
+    name: string,
+    part: StackPart,
+    dir: string,
+    port: number,
+    backendUrl: string,
+    request: E2ETestRequest & { onOutput?: (name: string, chunk: string) => void },
+  ): Promise<{ stop(): Promise<void> }> {
     const opts = { log: request.log, signal: request.signal };
     let file = part.dev.file;
     if (part.language === "python") {
@@ -202,7 +210,11 @@ export class ProjectTesting implements TestingService {
     const env = Object.fromEntries(Object.entries(part.dev.env).map(([k, v]) => [k, fill(v)]));
     request.log(`Starting ${name}: ${file} ${args.join(" ")}`);
     let output = "";
-    const child = this.processes.spawn(file, args, { cwd: dir, env, signal: request.signal, onOutput: (c) => (output = tail(output + c, 4_000)) });
+    const child = this.processes.spawn(file, args, { cwd: dir, env, signal: request.signal, onOutput: (c) => {
+        output = tail(output + c, 4_000);
+        request.onOutput?.(name, c);
+      },
+    });
     let exited = false;
     void child.then(() => (exited = true));
     const url = `http://127.0.0.1:${port}${part.dev.readyPath}`;
@@ -215,7 +227,7 @@ export class ProjectTesting implements TestingService {
   }
 }
 
-interface RunningApp {
+export interface RunningApp {
   frontendUrl: string;
   backendUrl: string;
   stop(): Promise<void>;

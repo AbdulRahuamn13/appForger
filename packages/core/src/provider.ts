@@ -41,6 +41,12 @@ export interface AuthStatus {
   hint?: string;
 }
 
+/** Extra input for one turn. */
+export interface TurnInput {
+  /** Absolute paths of reference images (inside the session folder) to show the model. */
+  images?: string[];
+}
+
 export interface AgentSession {
   readonly id: string;
   /**
@@ -48,7 +54,7 @@ export interface AgentSession {
    * turn. Calling again continues the same conversation. The stream always
    * ends with a `session-end` event.
    */
-  sendTask(prompt: string): AsyncIterable<AgentEventPayload>;
+  sendTask(prompt: string, input?: TurnInput): AsyncIterable<AgentEventPayload>;
   /** Abort the in-flight turn and release resources. Safe to call twice. */
   stop(): Promise<void>;
 }

@@ -105,5 +105,8 @@ export function runRoutes(app: FastifyInstance, ctx: AppContext, orchestrator: O
   });
 
   /** Global kill switch. */
-  app.post("/api/kill", async () => orchestrator.killAll());
+  app.post("/api/kill", async () => {
+    await ctx.preview.stopAll();
+    return orchestrator.killAll();
+  });
 }

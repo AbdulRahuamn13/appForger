@@ -18,7 +18,7 @@ export async function demoScript(ctx: ScriptContext): Promise<ScriptStep> {
   const delayMs = 400;
   switch (ctx.role) {
     case "architect":
-      return architect(ctx.prompt, delayMs);
+      return ctx.prompt.includes("## Your job: plan only") ? storyPlanner(ctx, delayMs) : architect(ctx.prompt, delayMs);
     case "coder":
       return coder(ctx, delayMs);
     case "reviewer":
@@ -31,6 +31,45 @@ export async function demoScript(ctx: ScriptContext): Promise<ScriptStep> {
     case "integrator":
       return integrator(ctx, delayMs);
   }
+}
+
+/** Plan mode: tagged spec/design/questions + tasks JSON, no file changes. */
+function storyPlanner(ctx: ScriptContext, delayMs: number): ScriptStep {
+  const title = (/^## Story: (.+)$/m.exec(ctx.prompt)?.[1] ?? "Story").trim();
+  const feedback = section(ctx.prompt, "Feedback from the human (address all of it)");
+  const slug = slugify(title, 24);
+  const tasks = [
+    { key: `${slug}-api`, title: `API for ${title}`, description: "Endpoints and validation from the spec.", area: "backend", dependsOn: [], files: [`backend/src/routes/${slug}/**`] },
+    { key: `${slug}-ui`, title: `UI for ${title}`, description: "Screens from the spec and design notes.", area: "frontend", dependsOn: [], files: [`frontend/src/features/${slug}/**`] },
+  ];
+  const design = ctx.images.length
+    ? `Derived from ${ctx.images.length} reference image(s): neutral background #FAFAFA, text #111827, accent #2563EB; 8px spacing grid; 12px radius cards; system UI font 14/20, headings 24/32.`
+    : "";
+  return {
+    delayMs,
+    text: [
+      `<summary>Demo plan for "${title}"${feedback ? ` (revised: ${feedback.split("\n")[0]})` : ""}.</summary>`,
+      "<spec>",
+      `# ${title}`,
+      "",
+      "## Endpoints",
+      `- GET /api/${slug} — list`,
+      `- POST /api/${slug} — create (400 on invalid input)`,
+      "",
+      "## Screens",
+      "- List with empty state and a create form",
+      "</spec>",
+      "<design>",
+      design,
+      "</design>",
+      "<questions>",
+      feedback ? "" : "- Should items be sorted newest first?",
+      "</questions>",
+      "```json",
+      JSON.stringify({ tasks }, null, 2),
+      "```",
+    ].join("\n"),
+  };
 }
 
 function architect(prompt: string, delayMs: number): ScriptStep {

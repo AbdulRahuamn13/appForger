@@ -2,8 +2,11 @@
 export const ROLES = ["architect", "coder", "reviewer", "test-author", "integrator"] as const;
 export type RoleId = (typeof ROLES)[number];
 
-export const RUN_MODES = ["single", "pipeline", "swarm", "swarm-native"] as const;
+export const RUN_MODES = ["single", "pipeline", "swarm", "swarm-native", "plan"] as const;
 export type RunMode = (typeof RUN_MODES)[number];
+/** Modes that build code (everything except planning). */
+export const EXECUTION_MODES = ["pipeline", "swarm", "single", "swarm-native"] as const satisfies readonly RunMode[];
+export type ExecutionMode = (typeof EXECUTION_MODES)[number];
 
 export type ProjectShape = "monorepo" | "separate";
 
@@ -34,6 +37,8 @@ export interface ProjectSettings {
   requireApproval: boolean;
   /** Optional spend cap per run (USD, as reported by providers). */
   budgetUsd?: number;
+  /** Skill ids enabled for this project's agents. Undefined = every skill marked "default". */
+  skills?: string[];
 }
 
 export interface Project {
@@ -73,6 +78,8 @@ export const TERMINAL_RUN_STATUSES: readonly RunStatus[] = ["succeeded", "failed
 export interface Run {
   id: string;
   projectId: string;
+  /** The story this run plans or executes. */
+  storyId?: string;
   mode: RunMode;
   brief: string;
   status: RunStatus;
@@ -200,4 +207,103 @@ export interface UsageSummary {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+}
+
+// ───────── Stories: plan first, then execute ─────────
+
+export const STORY_STATUSES = ["draft", "planning", "plan-review", "running", "done", "failed", "reverted"] as const;
+export type StoryStatus = (typeof STORY_STATUSES)[number];
+
+export interface PlannedTaskDraft {
+  key: string;
+  title: string;
+  description: string;
+  area: TaskArea;
+  dependsOn: string[];
+  /** Ownership globs relative to the project folder. */
+  files: string[];
+}
+
+export interface StoryPlan {
+  summary: string;
+  /** Markdown spec: data model, endpoints, screens, acceptance criteria. */
+  spec: string;
+  /** Design notes derived from reference images (layout, colours, type, components). */
+  design?: string;
+  /** Open questions / assumptions the planner wants you to confirm. */
+  questions: string[];
+  tasks: PlannedTaskDraft[];
+  version: number;
+  createdAt: string;
+  /** Set when you edited the plan by hand. */
+  edited?: boolean;
+}
+
+export interface Story {
+  id: string;
+  projectId: string;
+  title: string;
+  /** What to build, in your words. */
+  body: string;
+  /** One criterion per line; the reviewer checks them. */
+  acceptance: string;
+  status: StoryStatus;
+  order: number;
+  /** Reference image asset ids. */
+  images: string[];
+  plan?: StoryPlan;
+  /** Mode chosen when the plan was approved. */
+  mode?: ExecutionMode;
+  planRunIds: string[];
+  runIds: string[];
+  /** One-line outcome once finished. */
+  outcome?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Asset {
+  id: string;
+  projectId: string;
+  name: string;
+  mediaType: string;
+  size: number;
+  createdAt: string;
+}
+
+// ───────── Skills ─────────
+
+/** A reusable instruction pack (Claude Code / Agent Skills compatible SKILL.md). */
+export interface Skill {
+  /** Folder name / slug. */
+  id: string;
+  name: string;
+  description: string;
+  /** Roles that get this skill; empty = every role. */
+  roles: RoleId[];
+  /** Enabled for new projects by default. */
+  default: boolean;
+  /** Markdown instructions (the SKILL.md body). */
+  body: string;
+  /** Extra files shipped with the skill (relative paths). */
+  files: string[];
+  builtIn: boolean;
+  updatedAt: string;
+}
+
+// ───────── Storage ─────────
+
+export type StorageMode = "local" | "cloud";
+
+export interface StorageSettings {
+  mode: StorageMode;
+  local: { path: string };
+  /** Any S3-compatible bucket: AWS S3, Cloudflare R2, MinIO, Backblaze B2, Wasabi... */
+  cloud: { endpoint?: string; region: string; bucket: string; prefix: string; forcePathStyle: boolean };
+}
+
+export interface LogFileInfo {
+  name: string;
+  size: number;
+  updatedAt: string;
 }

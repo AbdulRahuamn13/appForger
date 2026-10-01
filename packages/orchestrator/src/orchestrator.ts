@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { cp, readFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   AccessPolicy,
@@ -12,12 +12,13 @@ import type {
   RoleId,
   Run,
   RunStatus,
+  StoryPlan,
   Task,
   TaskStatus,
   TestReport,
   TurnResult,
 } from "@appforge/core";
-import { newId, nowIso, parseReview, TERMINAL_RUN_STATUSES, truncate } from "@appforge/core";
+import { newId, nowIso, parseReview, slugify, TERMINAL_RUN_STATUSES, truncate } from "@appforge/core";
 import { runTurn, type ProviderRegistry } from "@appforge/providers";
 import {
   architectPrompt,
@@ -29,16 +30,18 @@ import {
   reviewerPrompt,
   roleAccess,
   singlePrompt,
+  storyPlanPrompt,
   systemPrompt,
   testAuthorPrompt,
   TOOLING_SIDE_EFFECTS,
   type CoderFeedback,
   type PromptContext,
+  type StoryContext,
 } from "@appforge/templates";
 import { APPFORGE_DIR, checkCommand, enforceWritePolicy, GitRepo, type PolicyViolation, type ProcessRegistry } from "@appforge/workspace";
-import { parsePlan, topoOrder } from "./plan.ts";
+import { parsePlan, parseStoryPlan, toPlannedTasks, topoOrder } from "./plan.ts";
 import { Deferred, Mutex, Semaphore } from "./sync.ts";
-import { NO_TESTING, type Emit, type OrchestratorStore, type RunState, type StartRunInput, type TestingService } from "./types.ts";
+import { NO_TESTING, type ContextProvider, type Emit, type OrchestratorStore, type RunHooks, type RunState, type StartRunInput, type TestingService } from "./types.ts";
 
 export class RunCancelled extends Error {
   constructor(message = "Run cancelled") {
@@ -96,6 +99,8 @@ export interface OrchestratorDeps {
   emit: Emit;
   testing?: TestingService;
   processes?: ProcessRegistry;
+  context?: ContextProvider;
+  hooks?: RunHooks;
 }
 
 /**
@@ -133,10 +138,24 @@ export class Orchestrator {
     if (!input.brief?.trim()) throw new Error("A brief is required");
     this.assertProviders(project, input.mode);
     const now = nowIso();
-    const run: Run = { id: newId("run"), projectId, mode: input.mode, brief: input.brief.trim(), status: "pending", createdAt: now, updatedAt: now };
+    const run: Run = {
+      id: newId("run"),
+      projectId,
+      mode: input.mode,
+      brief: input.brief.trim(),
+      status: "pending",
+      createdAt: now,
+      updatedAt: now,
+      ...(input.storyId ? { storyId: input.storyId } : {}),
+    };
     this.deps.store.insertRun(run);
     const repo = input.repo && project.repos.some((r) => r.path === input.repo) ? input.repo : project.repos[0]?.path ?? ".";
-    this.deps.store.setRunState(run.id, { baseBranches: {}, phase: "planning", repo } satisfies RunState);
+    const state: RunState = { baseBranches: {}, phase: "planning", repo };
+    if (input.acceptance?.trim()) state.acceptance = input.acceptance.trim();
+    if (input.plan) state.plan = input.plan;
+    if (input.previousPlan) state.previousPlan = input.previousPlan;
+    if (input.feedback?.trim()) state.feedback = input.feedback.trim();
+    this.deps.store.setRunState(run.id, state);
     this.deps.emit({ kind: "run-updated", run });
     this.launch(run, project);
     return run;
@@ -224,7 +243,7 @@ export class Orchestrator {
       if (!this.deps.providers.has("claude-code")) throw new Error("Claude-native swarm needs the claude-code provider");
       return;
     }
-    const roles: RoleId[] = mode === "single" ? ["coder", "reviewer"] : ["architect", "coder", "reviewer", "test-author", "integrator"];
+    const roles: RoleId[] = mode === "plan" ? ["architect"] : mode === "single" ? ["coder", "reviewer"] : ["architect", "coder", "reviewer", "test-author", "integrator"];
     for (const role of roles) {
       const id = project.settings.roles[role]?.provider;
       if (!id || !this.deps.providers.has(id)) throw new Error(`No provider "${id}" for the ${role} role; check the project settings`);
@@ -270,6 +289,9 @@ export class Orchestrator {
         case "swarm-native":
           await this.runNative(ar);
           break;
+        case "plan":
+          await this.runPlanOnly(ar);
+          break;
       }
       if (!TERMINAL_RUN_STATUSES.includes(ar.run.status)) this.setRunStatus(ar, "succeeded");
     } catch (err) {
@@ -284,6 +306,11 @@ export class Orchestrator {
         this.log(ar, "error", message);
         this.setRunStatus(ar, "failed", message);
       }
+    }
+    try {
+      await this.deps.hooks?.onRunFinished?.(ar.run);
+    } catch (err) {
+      this.log(ar, "warn", `After-run hook failed: ${(err as Error).message}`);
     }
   }
 
@@ -300,7 +327,7 @@ export class Orchestrator {
 
   private async runPlanned(ar: ActiveRun, parallel: boolean): Promise<void> {
     let tasks = this.deps.store.listTasks(ar.run.id);
-    if (tasks.length === 0) tasks = await this.plan(ar, parallel);
+    if (tasks.length === 0) tasks = ar.state.plan ? await this.tasksFromApprovedPlan(ar, parallel) : await this.plan(ar, parallel);
     ar.state.phase = "building";
     this.saveState(ar);
 
@@ -320,6 +347,100 @@ export class Orchestrator {
       }
     }
     await this.integrate(ar);
+  }
+
+  /** Plan mode: the Architect proposes a plan (read-only); a human reviews it before anything is built. */
+  private async runPlanOnly(ar: ActiveRun): Promise<void> {
+    const { project } = ar;
+    const maxTasks = 8;
+    const [title = "Story", ...rest] = ar.run.brief.split("\n");
+    const previous = ar.state.previousPlan;
+    this.log(ar, "info", previous ? "Planner is revising the plan with your feedback" : "Planner is reading the project and drafting a plan (no code is changed)");
+    const images = (await this.deps.context?.prepare(project, ar.run, project.path))?.images ?? [];
+    const { result } = await this.runAgent(ar, {
+      role: "architect",
+      cwd: project.path,
+      access: { mode: "read-only", shell: true },
+      prompt: storyPlanPrompt(
+        { title, body: rest.join("\n").trim() || title, ...(ar.state.acceptance ? { acceptance: ar.state.acceptance } : {}) },
+        { maxTasks, hasImages: images.length > 0, ...(previous ? { previous } : {}), ...(ar.state.feedback ? { feedback: ar.state.feedback } : {}) },
+      ),
+      ...(project.shape === "monorepo" ? { policyRepo: project.path } : {}),
+    });
+    if (project.shape === "separate") {
+      for (const ref of project.repos) await enforceWritePolicy(new GitRepo(this.repoDir(ar, ref.path)), { mode: "read-only", shell: false });
+    }
+    if (result.status !== "completed") throw new Error(`Planner failed: ${result.error ?? result.status}`);
+    const { plan, warnings } = parseStoryPlan(result.text, ar.run.brief, maxTasks, (previous?.version ?? 0) + 1);
+    for (const w of warnings) this.log(ar, "warn", w);
+    ar.state.plan = plan;
+    ar.state.phase = "done";
+    this.saveState(ar);
+    this.log(ar, "info", `Plan v${plan.version} ready for review: ${plan.tasks.length} task(s)${plan.questions.length ? `, ${plan.questions.length} open question(s)` : ""}`);
+    await this.deps.hooks?.onPlanReady?.(ar.run, plan, warnings);
+  }
+
+  /** Execution of an approved plan: commit its spec, then create the tasks without asking the Architect again. */
+  private async tasksFromApprovedPlan(ar: ActiveRun, parallel: boolean): Promise<Task[]> {
+    const { project } = ar;
+    const plan = ar.state.plan as StoryPlan;
+    const slug = slugify(ar.run.brief.split("\n")[0] ?? "story", 48);
+    const specPath = `docs/stories/${slug}.md`;
+    const doc = [
+      `# ${ar.run.brief.split("\n")[0] ?? "Story"}`,
+      "",
+      `_Approved plan v${plan.version}${plan.edited ? " (edited by hand)" : ""}_`,
+      "",
+      plan.summary,
+      "",
+      plan.spec,
+      plan.design ? `\n## Design\n\n${plan.design}` : "",
+      ar.state.acceptance ? `\n## Acceptance criteria\n\n${ar.state.acceptance}` : "",
+      "\n## Tasks\n",
+      ...plan.tasks.map((t) => `- **${t.title}** (${t.area})${t.dependsOn.length ? ` — after ${t.dependsOn.join(", ")}` : ""}: ${t.description.split("\n")[0]}`),
+    ].join("\n");
+    await mkdir(path.join(project.path, "docs", "stories"), { recursive: true });
+    await writeFile(path.join(project.path, specPath), `${doc}\n`);
+    await this.commitDocs(ar, `docs: approved plan for "${ar.run.brief.split("\n")[0] ?? "story"}"`);
+    ar.state.specPath = specPath;
+    ar.state.planSummary = plan.summary;
+    this.saveState(ar);
+    const now = nowIso();
+    const tasks = toPlannedTasks(plan.tasks, project.shape).map<Task>((t, i) => ({
+      id: newId("task"),
+      runId: ar.run.id,
+      key: t.key,
+      title: t.title,
+      description: t.description,
+      area: t.area,
+      repo: t.repo,
+      status: "todo",
+      dependsOn: t.dependsOn,
+      files: t.files,
+      attempts: 0,
+      order: i,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    for (const task of tasks) this.saveTask(task);
+    this.log(ar, "info", `Building the approved plan (${parallel ? "swarm" : "pipeline"}): ${tasks.map((t) => t.key).join(", ")}`);
+    return tasks;
+  }
+
+  /** The brief plus the approved plan, for modes that hand everything to one agent. */
+  private briefWithPlan(ar: ActiveRun): string {
+    const plan = ar.state.plan;
+    if (!plan) return ar.run.brief;
+    return [
+      ar.run.brief,
+      ar.state.acceptance ? `\n## Acceptance criteria\n${ar.state.acceptance}` : "",
+      "\n## Approved plan (follow it)",
+      plan.summary,
+      plan.spec,
+      plan.design ? `\n### Design\n${plan.design}` : "",
+      "\n### Tasks",
+      ...plan.tasks.map((t) => `- ${t.title} (${t.area}): ${t.description}`),
+    ].join("\n");
   }
 
   private async plan(ar: ActiveRun, parallel: boolean): Promise<Task[]> {
@@ -450,7 +571,7 @@ export class Orchestrator {
     if (DONE_TASK.includes(task.status)) return;
     const wt = await this.ensureWorktree(ar, task);
     task = this.task(task.id);
-    let prompt = task.status === "todo" ? singlePrompt(ar.run.brief) : undefined;
+    let prompt = task.status === "todo" ? singlePrompt(this.briefWithPlan(ar)) : undefined;
     for (;;) {
       if (prompt) {
         this.saveTask({ ...this.task(task.id), status: "in-progress" });
@@ -541,7 +662,7 @@ export class Orchestrator {
         // 1. Coder
         if (!skipCoder) {
           this.saveTask({ ...task, status: "in-progress" });
-          const prompt = options.native && !feedback ? nativeTeamPrompt(ar.run.brief, settings.concurrency) : coderPrompt(task, feedback);
+          const prompt = options.native && !feedback ? nativeTeamPrompt(this.briefWithPlan(ar), settings.concurrency) : coderPrompt(task, feedback, this.storyContext(ar));
           const session = ar.coderSessions.get(task.id);
           const outcome = await this.runAgent(ar, {
             role: "coder",
@@ -574,7 +695,7 @@ export class Orchestrator {
         if (!diff.trim()) {
           review = { verdict: "request-changes", issues: [{ severity: "blocker", message: "No changes were made for this task." }] };
         } else {
-          const reviewer = await this.runAgent(ar, { role: "reviewer", cwd: wt, prompt: reviewerPrompt(task, diff), task: this.task(task.id), policyRepo: wt });
+          const reviewer = await this.runAgent(ar, { role: "reviewer", cwd: wt, prompt: reviewerPrompt(task, diff, undefined, this.storyContext(ar)), task: this.task(task.id), policyRepo: wt });
           if (reviewer.result.status !== "completed") return fail(`reviewer failed: ${reviewer.result.error ?? reviewer.result.status}`);
           review = parseReview(reviewer.result.text);
         }
@@ -818,6 +939,10 @@ export class Orchestrator {
 
   // ───────────────────────── agents ─────────────────────────
 
+  private storyContext(ar: ActiveRun): StoryContext {
+    return { ...(ar.state.acceptance ? { acceptance: ar.state.acceptance } : {}), ...(ar.state.specPath ? { specPath: ar.state.specPath } : {}) };
+  }
+
   private promptContext(project: Project): PromptContext {
     return { projectName: project.name, shape: project.shape, stack: getStack(project.stackId), settings: project.settings };
   }
@@ -843,7 +968,7 @@ export class Orchestrator {
         session ??= await adapter.startSession({
           cwd: call.cwd,
           role: call.role,
-          systemPrompt: systemPrompt(call.role, this.promptContext(project)),
+          systemPrompt: [systemPrompt(call.role, this.promptContext(project)), await this.deps.context?.systemAddendum(project, call.role, ar.run)].filter(Boolean).join("\n\n"),
           access,
           checkCommand: (command) => {
             const verdict = checkCommand(command, call.cwd);
@@ -855,7 +980,17 @@ export class Orchestrator {
         ar.sessions.add(session);
         this.log(ar, "info", `${agentId} started on ${adapter.label}${model ? ` (${model})` : ""}${call.task ? ` for ${call.task.key}` : ""}`, call.task?.id);
         const live = session;
-        result = await runTurn(live, call.prompt, (payload) => this.emitAgent(ar, { agentId, role: call.role, provider: providerId, ...(call.task ? { taskId: call.task.id } : {}) }, payload));
+        // Fresh project context (history, memory, logs, reference images) in the agent's folder.
+        const prepared = await this.deps.context?.prepare(project, ar.run, call.cwd);
+        // Reference images go to the planner and to UI-facing coders/reviewers.
+        const wantsImages = call.role === "architect" || ((call.role === "coder" || call.role === "reviewer") && call.task?.area !== "backend");
+        const images = wantsImages ? (prepared?.images ?? []) : [];
+        result = await runTurn(
+          live,
+          call.prompt,
+          (payload) => this.emitAgent(ar, { agentId, role: call.role, provider: providerId, ...(call.task ? { taskId: call.task.id } : {}) }, payload),
+          images.length ? { images } : undefined,
+        );
       } finally {
         release();
       }
