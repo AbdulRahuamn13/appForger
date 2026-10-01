@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { ErrorNote, Tabs } from "@/components/ui/misc.tsx";
-import { Api } from "@/lib/api.ts";
+import { Api, ProviderApi } from "@/lib/api.ts";
 import { navigate } from "@/lib/router.ts";
 import { useServerMessages } from "@/lib/socket.ts";
 
@@ -22,9 +22,14 @@ export function ProjectPage({ id }: { id: string }) {
   const [project, setProject] = useState<Project>();
   const [error, setError] = useState<string>();
   const [tab, setTab] = useState<"runs" | "settings">("settings");
+  const [providers, setProviders] = useState<ProviderOption[]>(FALLBACK_PROVIDERS);
 
   useEffect(() => {
     Api.project(id).then(setProject, (e: Error) => setError(e.message));
+    ProviderApi.list().then(
+      (list) => setProviders(list.map((p) => ({ id: p.id, label: `${p.label}${p.status?.ok ? "" : " — not ready"}`, models: p.models }))),
+      () => undefined,
+    );
   }, [id]);
   useServerMessages((msg) => {
     if (msg.kind === "project-updated" && msg.project.id === id) setProject(msg.project);
@@ -75,7 +80,7 @@ export function ProjectPage({ id }: { id: string }) {
           {tab === "settings" ? (
             <ProjectSettingsForm
               project={project}
-              providers={FALLBACK_PROVIDERS}
+              providers={providers}
               onSave={async (settings) => setProject(await Api.updateProject(project.id, { settings }))}
             />
           ) : (

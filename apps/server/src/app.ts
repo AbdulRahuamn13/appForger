@@ -4,11 +4,13 @@ import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
+import { createDefaultRegistry, KeychainSecretStore, type ProviderRegistry, type SecretStore } from "@appforge/providers";
 import type { AppContext } from "./context.ts";
 import { Store } from "./db/store.ts";
 import { Hub } from "./hub.ts";
 import { fsRoutes } from "./routes/fs.ts";
 import { projectRoutes } from "./routes/projects.ts";
+import { providerRoutes } from "./routes/providers.ts";
 
 export interface BuildOptions {
   dataDir: string;
@@ -17,6 +19,10 @@ export interface BuildOptions {
   /** Serve the built UI from this folder if it exists. */
   webDist?: string;
   logger?: boolean;
+  secrets?: SecretStore;
+  providers?: ProviderRegistry;
+  /** Register the free "demo" provider (canned output) for trying runs without an account. */
+  demo?: boolean;
 }
 
 export interface Built {
@@ -30,7 +36,9 @@ export async function buildApp(options: BuildOptions): Promise<Built> {
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 5 * 1024 * 1024 });
   const store = new Store(options.dbFile ?? path.join(options.dataDir, "appforge.db"));
   const hub = new Hub();
-  const ctx: AppContext = { store, hub, dataDir: options.dataDir };
+  const secrets = options.secrets ?? new KeychainSecretStore();
+  const providers = options.providers ?? createDefaultRegistry(secrets, { demo: options.demo ?? false });
+  const ctx: AppContext = { store, hub, dataDir: options.dataDir, providers, secrets };
 
   // AppForge runs commands on this machine: only answer local pages, which
   // blocks DNS-rebinding and cross-site requests from other origins.
@@ -57,6 +65,7 @@ export async function buildApp(options: BuildOptions): Promise<Built> {
   app.get("/api/health", async () => ({ ok: true }));
   fsRoutes(app);
   projectRoutes(app, ctx);
+  providerRoutes(app, ctx);
 
   const webDist = options.webDist ?? defaultWebDist();
   if (existsSync(path.join(webDist, "index.html"))) {

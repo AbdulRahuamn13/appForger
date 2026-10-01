@@ -60,3 +60,29 @@ export const Api = {
   deleteProject: (id: string) => api<{ ok: true }>(`/api/projects/${id}`, { method: "DELETE" }),
   scaffold: (id: string) => api<{ written: string[] }>(`/api/projects/${id}/scaffold`, { method: "POST", body: {} }),
 };
+
+export interface ProviderInfo {
+  id: string;
+  label: string;
+  vendor: string;
+  authKind: "subscription" | "api-key";
+  models: string[];
+  defaultModel?: string;
+  status?: { ok: boolean; installed: boolean; detail: string; hint?: string };
+}
+
+export interface SecretStatus {
+  present: boolean;
+  source?: "keychain" | "env";
+  keychainError?: string;
+}
+
+export const ProviderApi = {
+  list: (refresh = false) => api<ProviderInfo[]>(`/api/providers${refresh ? "?refresh=1" : ""}`),
+  secrets: () => api<Record<string, SecretStatus>>("/api/secrets"),
+  setSecret: (name: string, value: string) => api<{ ok: true }>(`/api/secrets/${name}`, { method: "PUT", body: { value } }),
+  deleteSecret: (name: string) => api<{ ok: true }>(`/api/secrets/${name}`, { method: "DELETE" }),
+  playground: (body: { provider: string; model?: string; prompt: string; projectId?: string }) =>
+    api<{ id: string; cwd: string }>("/api/playground", { body }),
+  stopPlayground: (id: string) => api<{ ok: true }>(`/api/playground/${id}/stop`, { method: "POST", body: {} }),
+};
