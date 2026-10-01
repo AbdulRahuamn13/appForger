@@ -48,33 +48,79 @@ Environment variables: `APPFORGE_HOME` (data dir, default `~/.appforge`),
 
 ## Using it
 
-1. **Providers** — check that Claude Code (and Codex) show *Signed in*. Use
-   *Try a prompt* to stream one prompt through any provider.
-2. **New project** — pick or create a folder (server-side folder browser, or
-   the native dialog in the desktop app). Choose a stack (Node/Express + React,
-   FastAPI + React, ASP.NET Core + React, or Custom), monorepo or two separate
+1. **Settings → Providers & keys** — check that Claude Code (and Codex) show
+   *Signed in*. *Try a prompt* streams one prompt through any provider.
+   **Settings → Environment** checks git, Node, Python, .NET, CLIs, keychain
+   and storage in one place.
+2. **New project** (sidebar `+`) — pick or create a folder, a stack (Node/Express
+   + React, FastAPI + React, ASP.NET Core + React, or Custom), monorepo or two
    repos, and your unit/E2E frameworks. AppForge runs `git init`, writes the
    starter files and test scaffolding, and commits them.
-3. **Settings** — pick provider + model per role (e.g. Claude codes, Codex
-   reviews), swarm concurrency, fix-loop limit, per-run budget, and whether
-   every merge needs your approval. Switching Playwright ↔ Cypress scaffolds
-   the new framework immediately. *Generate GitHub Actions workflow* writes a
-   CI file running the same commands.
-4. **Runs** — pick a mode and write a brief:
+3. **Stories** — the main loop, as many stories per project as you like:
+   1. *New story*: title, what to build, acceptance criteria (one per line),
+      and optional **reference images** (click, drop or paste a mockup). Start
+      from a template (CRUD feature, sign up & log in, page from a design…).
+   2. *Plan*: a read-only planner reads your code, earlier stories, logs and
+      images, then proposes a spec, design notes, open questions and tasks.
+      **Nothing is built yet.**
+   3. Review the plan: **edit it by hand** (tasks, order, dependencies, file
+      ownership, spec), or **send it back with feedback** (e.g. answers to its
+      questions) for a new version.
+   4. *Approve & build*: choose **how** — Pipeline, Swarm, Single agent or
+      Claude agent team (AppForge recommends one from the plan's shape).
+   5. Approve merges on the run page (side-by-side diffs, reviewer verdicts,
+      test results), then read the run's **log file**. Pick the next story.
+   - *Undo story* reverts a finished story's merges with new commits.
+4. **Logs** — every plan and build writes a plain-text log (brief, plan,
+   tasks, reviews, tests, approvals, usage, full timeline) to the project.
+   View, filter and download each one, or all of them as one file.
+5. **Memory** — project notes every agent reads (decisions, conventions,
+   gotchas). AppForge appends each story's outcome; edit freely.
+6. **Preview** — starts the app's backend and frontend from the main branch
+   and shows it in the page, so you can check the result without a terminal.
+7. **Skills** (sidebar) — reusable instructions for agents, per role, in the
+   same `SKILL.md` format Claude Code uses. Eight built-ins (verify before
+   done, secure by default, API contract first, accessible UI, design from
+   reference images…); create your own, or import a folder such as
+   `~/.claude/skills`. Turn skills on or off per project in its settings.
+8. **Settings → Storage** — keep skills, logs, memory and reference images in
+   a **local folder** or a **cloud** S3-compatible bucket (AWS S3, Cloudflare
+   R2, MinIO, Backblaze B2). Switching tests the new location and can copy
+   everything across; cloud keys go to the OS keychain.
+9. **Project settings** — provider + model per role, swarm concurrency,
+   fix-loop limit, per-run budget, merge approvals, skills, and an optional
+   GitHub Actions workflow.
 
-   | Mode | How it runs |
-   |---|---|
-   | Pipeline | Architect writes `docs/SPEC.md`, `docs/openapi.yaml` and a task list; each task then goes Coder → Reviewer → Test author → tests → approval → merge, one at a time |
-   | Swarm | Same, but up to *N* coders run in parallel, each in its own git worktree with its own file ownership; tasks start when their dependencies have merged |
-   | Single agent | One coder on one branch; you steer it turn by turn, then *Finish* runs review + tests and asks you to approve the merge |
-   | Claude agent team | Hands the brief to Claude Code's experimental Agent Teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), then reviews, tests and merges the result |
+Everywhere: **⌘K / Ctrl+K** opens a command palette; light/dark theme in the
+sidebar; desktop notifications when a plan is ready, a merge needs approval or
+a run finishes (Settings → General); the **Kill switch** stops every agent,
+test runner, preview and dev server.
 
-5. **Run page** — task board, live logs per agent, approval cards with a
-   side-by-side Monaco diff (approve, send back with a comment, or reject),
-   test results, and tokens/cost per agent. *Stop* ends a run; the sidebar's
-   **Kill switch** stops every agent, test runner and dev server at once.
-   Runs pause on plan/rate limits and resume where they stopped; after a
-   restart, interrupted runs resume from their saved tasks.
+### How agents use your project's history
+
+Before every agent turn AppForge writes `.appforge/context/` (git-ignored)
+into the agent's folder: `PROJECT_CONTEXT.md` (memory, every story with its
+outcome and plan summary, recent runs), the latest run logs, the story's
+reference images and the enabled skills' files. Skills and a pointer to this
+folder are added to each agent's instructions, and reference images are sent
+to vision-capable models (Claude Code reads them, Codex gets `-i`, API models
+get image blocks). Acceptance criteria go to coders and are checked by the
+reviewer.
+
+### Why these extras
+
+They target what developers report losing the most time to:
+- **AI code that is "almost right, but not quite"** is the top frustration with
+  AI tools (45%). Hence plan-first approval, acceptance criteria checked by
+  review, a *verify before done* skill, live preview, and one-click undo.
+- **Context switching** is the top productivity blocker (72%), and tool
+  fragmentation hurts most developers. Hence plans, diffs, logs, preview,
+  memory and settings in one window, plus the command palette and notifications.
+- **Unclear requirements and poor documentation** come next. Hence stories
+  with acceptance criteria, planner questions, project memory, and the
+  approved plan committed as `docs/stories/<story>.md`.
+
+Sources: [Stack Overflow 2025 Developer Survey](https://stackoverflow.blog/2025/07/29/developers-remain-willing-but-reluctant-to-use-ai-the-2025-developer-survey-results-are-here/), [The Register on "almost right" AI code](https://www.theregister.com/2025/07/29/coders_are_using_ai_tools/), [Chainguard 2026 Engineering Reality Report](https://www.chainguard.dev/2026-engineering-reality-report), [JetBrains State of Developer Ecosystem 2025](https://blog.jetbrains.com/research/2025/10/state-of-developer-ecosystem-2025/).
 
 ## What happens on disk
 
@@ -85,7 +131,10 @@ Environment variables: `APPFORGE_HOME` (data dir, default `~/.appforge`),
   blocks them.
 - Your main checkout must be on its base branch with no uncommitted changes
   when AppForge merges; otherwise the run pauses and tells you what to fix.
-- Data (projects, runs, events) lives in SQLite at `$APPFORGE_HOME/appforge.db`.
+- Data (projects, stories, runs, events) lives in SQLite at `$APPFORGE_HOME/appforge.db`.
+- Skills, log files, project memory and reference images live in the storage
+  you choose (default `$APPFORGE_HOME/storage`, or a cloud bucket).
+- Each approved plan is committed as `docs/stories/<story>.md`.
 
 ## Guardrails
 
@@ -120,12 +169,13 @@ Layout:
 apps/server         Fastify API, WebSocket hub, SQLite (Drizzle), wires everything
 apps/web            React + Vite + Tailwind UI (shadcn-style components, Monaco, xterm.js)
 apps/desktop        Optional Electron wrapper
-packages/core       Shared types: Project, Run, Task, AgentEvent, ProviderAdapter, TestRunnerAdapter
+packages/core       Shared types: Project, Story, Run, Task, AgentEvent, ProviderAdapter, TestRunnerAdapter
 packages/providers  claude-code, codex-cli, claude-api, openai-api (+ scripted/demo)
-packages/orchestrator  Single, pipeline, swarm, Claude-native modes; task board; merges
+packages/orchestrator  Plan, single, pipeline, swarm, Claude-native modes; task board; merges
 packages/workspace  Sandbox, command allow-list, git worktrees, process registry
 packages/testing    Playwright, Cypress, Vitest, Jest, xUnit, pytest adapters + E2E app runner
 packages/templates  Stack templates and role prompts
+packages/storage    Local / S3-compatible storage, skills library (SKILL.md)
 ```
 
 Adding a vendor = one `ProviderAdapter` in `packages/providers`; adding a test

@@ -1,3 +1,4 @@
+import type { Asset, DoctorCheckDto, ExecutionModeDto, LogFileInfo, PreviewState, RoleId, Skill, StorageSettings, Story, StoryPlan } from "./api-types.ts";
 import type {
   AgentEvent,
   Approval,
@@ -127,4 +128,70 @@ export const RunApi = {
   approvalDiff: (approvalId: string) => api<FileDiff[]>(`/api/approvals/${approvalId}/diff`),
   taskDiff: (taskId: string) => api<FileDiff[]>(`/api/tasks/${taskId}/diff`),
   kill: () => api<{ runs: number; processes: number }>("/api/kill", { body: {} }),
+};
+
+// ───── Stories, logs, memory, images, skills, settings ─────
+
+
+export interface StoryInput {
+  title?: string;
+  body?: string;
+  acceptance?: string;
+  images?: string[];
+}
+
+export const StoryApi = {
+  list: (projectId: string) => api<Story[]>(`/api/projects/${projectId}/stories`),
+  get: (id: string) => api<{ story: Story; runs: Run[] }>(`/api/stories/${id}`),
+  create: (projectId: string, body: StoryInput) => api<Story>(`/api/projects/${projectId}/stories`, { body }),
+  update: (id: string, body: StoryInput & { plan?: StoryPlan }) => api<Story>(`/api/stories/${id}`, { method: "PATCH", body }),
+  remove: (id: string) => api<{ ok: true }>(`/api/stories/${id}`, { method: "DELETE" }),
+  reorder: (projectId: string, ids: string[]) => api<Story[]>(`/api/projects/${projectId}/stories/reorder`, { body: { ids } }),
+  plan: (id: string, feedback?: string) => api<Run>(`/api/stories/${id}/plan`, { body: feedback ? { feedback } : {} }),
+  approve: (id: string, mode: ExecutionModeDto, repo?: string) => api<Run>(`/api/stories/${id}/approve`, { body: { mode, ...(repo ? { repo } : {}) } }),
+  undo: (id: string) => api<{ reverted: number }>(`/api/stories/${id}/undo`, { body: {} }),
+};
+
+export const KnowledgeApi = {
+  logs: (projectId: string) => api<LogFileInfo[]>(`/api/projects/${projectId}/logs`),
+  log: async (projectId: string, name: string) => {
+    const res = await fetch(`/api/projects/${projectId}/logs/${encodeURIComponent(name)}`);
+    if (!res.ok) throw new ApiError("Log not found", res.status);
+    return res.text();
+  },
+  logUrl: (projectId: string, name: string) => `/api/projects/${projectId}/logs/${encodeURIComponent(name)}?download=1`,
+  allLogsUrl: (projectId: string) => `/api/projects/${projectId}/logs-all`,
+  saveRunLog: (runId: string) => api<{ name: string }>(`/api/runs/${runId}/log`, { body: {} }),
+  memory: (projectId: string) => api<{ text: string }>(`/api/projects/${projectId}/memory`),
+  setMemory: (projectId: string, text: string) => api<{ ok: true }>(`/api/projects/${projectId}/memory`, { method: "PUT", body: { text } }),
+  uploadImage: async (projectId: string, file: File) => {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < buf.length; i += 0x8000) binary += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    return api<Asset>(`/api/projects/${projectId}/assets`, { body: { name: file.name || "pasted.png", mediaType: file.type, dataBase64: btoa(binary) } });
+  },
+  imageUrl: (assetId: string) => `/api/assets/${assetId}`,
+  skills: () => api<Skill[]>("/api/skills"),
+  createSkill: (body: { name: string; description: string; roles: RoleId[]; default: boolean; body: string }) => api<Skill>("/api/skills", { body }),
+  saveSkill: (id: string, body: { name: string; description: string; roles: RoleId[]; default: boolean; body: string }) => api<Skill>(`/api/skills/${id}`, { method: "PUT", body }),
+  deleteSkill: (id: string) => api<{ ok: true }>(`/api/skills/${id}`, { method: "DELETE" }),
+  importSkills: (body: { path?: string; markdown?: string }) => api<{ imported: Skill[] }>("/api/skills/import", { body }),
+};
+
+export interface StorageInfo {
+  settings: StorageSettings;
+  location: string;
+  active: "local" | "cloud";
+  copied?: number;
+  credentials: { accessKeyId: SecretStatus; secretAccessKey: SecretStatus };
+}
+
+export const SettingsApi = {
+  storage: () => api<StorageInfo>("/api/settings/storage"),
+  setStorage: (body: { settings: StorageSettings; credentials?: { accessKeyId?: string; secretAccessKey?: string }; copy: boolean }) =>
+    api<StorageInfo>("/api/settings/storage", { method: "PUT", body }),
+  doctor: () => api<DoctorCheckDto[]>("/api/doctor"),
+  preview: (projectId: string) => api<PreviewState>(`/api/projects/${projectId}/preview`),
+  startPreview: (projectId: string) => api<PreviewState>(`/api/projects/${projectId}/preview/start`, { body: {} }),
+  stopPreview: (projectId: string) => api<PreviewState>(`/api/projects/${projectId}/preview/stop`, { body: {} }),
 };

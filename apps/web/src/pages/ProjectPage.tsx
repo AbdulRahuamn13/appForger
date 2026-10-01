@@ -1,99 +1,78 @@
-import { Settings2, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Project } from "@appforge/core";
-import { PageHeader } from "@/components/Layout.tsx";
-import { ProjectSettingsForm, type ProviderOption } from "@/components/ProjectSettingsForm.tsx";
+import { Page } from "@/components/Layout.tsx";
+import { LogsTab } from "@/components/project/LogsTab.tsx";
+import { MemoryTab } from "@/components/project/MemoryTab.tsx";
+import { PreviewTab } from "@/components/project/PreviewTab.tsx";
+import { SettingsTab } from "@/components/project/SettingsTab.tsx";
 import { RunsPanel } from "@/components/RunsPanel.tsx";
-import { Badge } from "@/components/ui/badge.tsx";
+import { StoriesTab } from "@/components/stories/StoriesTab.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { Card, CardContent } from "@/components/ui/card.tsx";
 import { ErrorNote, Tabs } from "@/components/ui/misc.tsx";
-import { Api, ProviderApi } from "@/lib/api.ts";
-import { navigate } from "@/lib/router.ts";
+import { Api } from "@/lib/api.ts";
+import { navigate, type ProjectTab } from "@/lib/router.ts";
 import { useServerMessages } from "@/lib/socket.ts";
 
-const FALLBACK_PROVIDERS: ProviderOption[] = [
-  { id: "claude-code", label: "Claude Code (subscription)", models: [] },
-  { id: "codex-cli", label: "Codex CLI (ChatGPT)", models: [] },
-  { id: "claude-api", label: "Claude API (key)", models: [] },
-  { id: "openai-api", label: "OpenAI API (key)", models: [] },
-];
+const TAB_LABELS: Record<ProjectTab, string> = {
+  stories: "Stories",
+  runs: "Runs",
+  logs: "Logs",
+  memory: "Memory",
+  preview: "Preview",
+  settings: "Settings",
+};
 
-export function ProjectPage({ id }: { id: string }) {
+export function ProjectPage({ id, tab, item }: { id: string; tab: ProjectTab; item: string | undefined }) {
   const [project, setProject] = useState<Project>();
   const [error, setError] = useState<string>();
-  const [tab, setTab] = useState<"runs" | "settings">("runs");
-  const [providers, setProviders] = useState<ProviderOption[]>(FALLBACK_PROVIDERS);
 
   useEffect(() => {
     Api.project(id).then(setProject, (e: Error) => setError(e.message));
-    ProviderApi.list().then(
-      (list) => setProviders(list.map((p) => ({ id: p.id, label: `${p.label}${p.status?.ok ? "" : " — not ready"}`, models: p.models }))),
-      () => undefined,
-    );
   }, [id]);
   useServerMessages((msg) => {
     if (msg.kind === "project-updated" && msg.project.id === id) setProject(msg.project);
   });
 
-  if (error) return <div className="p-6"><ErrorNote error={error} /></div>;
-  if (!project) return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
+  if (error) return <Page><ErrorNote error={error} /></Page>;
+  if (!project) return null;
 
   const remove = async () => {
     if (!confirm(`Forget "${project.name}"? Files in ${project.path} are not touched.`)) return;
     try {
       await Api.deleteProject(project.id);
-      navigate({ page: "projects" });
+      navigate({ page: "home" });
+      window.location.reload();
     } catch (err) {
       setError((err as Error).message);
     }
   };
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <PageHeader
-        title={project.name}
-        description={
-          <div className="flex flex-wrap items-center gap-2">
-            <code className="text-xs">{project.path}</code>
-            <Badge>{project.stackId}</Badge>
-            <Badge>{project.shape === "monorepo" ? "monorepo" : "backend + frontend repos"}</Badge>
-          </div>
-        }
-        actions={
-          <Button variant="ghost" size="icon" onClick={() => void remove()} aria-label="Forget project">
-            <Trash2 />
-          </Button>
-        }
-      />
-      <div className="mb-4">
-        <Tabs
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            { value: "runs", label: "Runs" },
-            { value: "settings", label: <span className="inline-flex items-center gap-1"><Settings2 className="size-3.5" /> Settings</span> },
-          ]}
-        />
+    <Page wide>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="truncate text-xl font-semibold tracking-tight">{project.name}</h1>
+          <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+            {project.path} · {project.stackId} · {project.shape === "monorepo" ? "monorepo" : "2 repos"}
+          </p>
+        </div>
+        <Button variant="ghost" size="icon" onClick={() => void remove()} aria-label="Forget project">
+          <Trash2 />
+        </Button>
       </div>
-      <Card>
-        <CardContent className="p-5">
-          {tab === "settings" ? (
-            <ProjectSettingsForm
-              project={project}
-              providers={providers}
-              onSave={async (settings) => {
-                const { scaffolded, ...updated } = await Api.updateProject(project.id, { settings });
-                setProject(updated);
-                return scaffolded;
-              }}
-              onWriteCi={async () => (await Api.writeCi(project.id)).written}
-            />
-          ) : (
-            <RunsPanel project={project} />
-          )}
-        </CardContent>
-      </Card>
-    </div>
+      <Tabs
+        className="mb-6"
+        value={tab}
+        onChange={(t) => navigate({ page: "project", id, tab: t })}
+        tabs={(Object.keys(TAB_LABELS) as ProjectTab[]).map((t) => ({ value: t, label: TAB_LABELS[t] }))}
+      />
+      {tab === "stories" && <StoriesTab project={project} item={item} />}
+      {tab === "runs" && <RunsPanel project={project} />}
+      {tab === "logs" && <LogsTab project={project} item={item} />}
+      {tab === "memory" && <MemoryTab project={project} />}
+      {tab === "preview" && <PreviewTab project={project} />}
+      {tab === "settings" && <SettingsTab project={project} onChange={setProject} />}
+    </Page>
   );
 }

@@ -143,18 +143,29 @@ process.stdin.on("end", () => {
     expect(first.status).toBe("completed");
     expect(first.text).toMatch(/^echo:\d+$/);
     expect(first.inputTokens).toBe(10);
-    const second = await runTurn(session, "and again");
+    const image = path.join(tmp, "ref.png");
+    await writeFile(image, "png");
+    const second = await runTurn(session, "and again", () => {}, { images: [image, path.join(tmp, "notes.txt")] });
     expect(second.status).toBe("completed");
 
     const calls = (await readFile(argsLog, "utf8")).trim().split("\n").map((l) => JSON.parse(l) as string[]);
     expect(calls[0]).toEqual(["exec", "--json", "--skip-git-repo-check", "-C", tmp, "-s", "read-only", "-m", "gpt-5-codex", "-"]);
-    expect(calls[1]?.slice(-3)).toEqual(["resume", "thread-123", "-"]);
+    // Follow-up turns resume the thread and attach supported images only.
+    expect(calls[1]?.slice(-5)).toEqual(["resume", "thread-123", "-i", image, "-"]);
   });
 
   it("reports a missing binary", async () => {
     const status = await new CodexCliAdapter({ codexBinary: path.join(tmp, "nope") }).checkAuth();
     expect(status.ok).toBe(false);
     expect(status.installed).toBe(false);
+  });
+});
+
+describe("reference images", () => {
+  it("tell CLI agents where the images are", async () => {
+    const { imageHint } = await import("../src/index.ts");
+    expect(imageHint([path.join(tmp, ".appforge/context/images/01-home.png"), path.join(tmp, "x.txt")], tmp)).toContain("- .appforge/context/images/01-home.png");
+    expect(imageHint([], tmp)).toBe("");
   });
 });
 
@@ -263,7 +274,9 @@ describe("claude-api adapter", () => {
       expect((await adapter.checkAuth()).ok).toBe(true);
 
       const session = await adapter.startSession(sessionOptions());
-      const result = await runTurn(session, "make hello.txt");
+      const image = path.join(tmp, "design.png");
+      await writeFile(image, Buffer.from("89504e47", "hex"));
+      const result = await runTurn(session, "make hello.txt", () => {}, { images: [image] });
       expect(result.status, result.error).toBe("completed");
       expect(result.text).toBe("Created hello.txt");
       expect(await readFile(path.join(tmp, "hello.txt"), "utf8")).toBe("hi\n");
@@ -271,6 +284,9 @@ describe("claude-api adapter", () => {
       expect(result.costUsd).toBeGreaterThan(0);
 
       expect(requests[0]).toMatchObject({ model: "claude-opus-5-5", fallbacks: "default", output_config: { effort: "high" } });
+      const firstUser = (requests[0] as { messages: { content: { type: string; source?: { media_type: string } }[] }[] }).messages[0];
+      expect(firstUser?.content.map((b) => b.type)).toEqual(["text", "image"]);
+      expect(firstUser?.content[1]?.source?.media_type).toBe("image/png");
       expect(String(headers[0]?.["anthropic-beta"])).toContain("server-side-fallback-2026-07-01");
       const second = requests[1] as { messages: { role: string; content: unknown }[] };
       const last = second.messages[second.messages.length - 1];

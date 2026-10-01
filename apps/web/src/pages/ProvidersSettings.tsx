@@ -1,6 +1,5 @@
 import { CheckCircle2, KeyRound, Play, RefreshCw, Square, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { PageHeader } from "@/components/Layout.tsx";
 import { LogPane, type LogLine } from "@/components/LogPane.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -15,7 +14,7 @@ const SECRETS = [
   { name: "openai-api-key", label: "OpenAI API key", placeholder: "sk-…" },
 ];
 
-export function ProvidersPage() {
+export function ProvidersSettings() {
   const [providers, setProviders] = useState<ProviderInfo[]>();
   const [secrets, setSecrets] = useState<Record<string, SecretStatus>>({});
   const [error, setError] = useState<string>();
@@ -37,16 +36,13 @@ export function ProvidersPage() {
   useEffect(() => void load(), [load]);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 p-6">
-      <PageHeader
-        title="Providers"
-        description="Subscriptions run through the vendors' own CLIs (sign in once in a terminal). API keys are stored in your OS keychain."
-        actions={
-          <Button variant="outline" onClick={() => void load(true)} disabled={refreshing}>
-            <RefreshCw className={refreshing ? "animate-spin" : ""} /> Re-check
-          </Button>
-        }
-      />
+    <div className="space-y-8">
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-[13px] text-muted-foreground">Subscriptions run through the vendors' own CLIs (sign in once in a terminal). API keys are stored in your OS keychain.</p>
+        <Button variant="outline" onClick={() => void load(true)} disabled={refreshing}>
+          <RefreshCw className={refreshing ? "animate-spin" : ""} /> Re-check
+        </Button>
+      </div>
       <ErrorNote error={error} />
       <div className="grid gap-3 sm:grid-cols-2">
         {providers?.map((p) => (
@@ -70,7 +66,7 @@ export function ProvidersPage() {
       </div>
 
       <section>
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+        <h2 className="mb-3 flex items-center gap-2 text-[13px] font-medium">
           <KeyRound className="size-4" /> API keys
         </h2>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -154,7 +150,7 @@ function Playground({ providers }: { providers: ProviderInfo[] }) {
 
   return (
     <section>
-      <h2 className="mb-1 text-lg font-semibold">Try a prompt</h2>
+      <h2 className="mb-1 text-[13px] font-medium">Try a prompt</h2>
       <p className="mb-3 text-sm text-muted-foreground">Sends one prompt through a provider in a scratch folder and streams the result.</p>
       <Card>
         <CardContent className="space-y-3 p-4">

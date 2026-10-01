@@ -25,24 +25,24 @@ export function Dialog({
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-[8vh]" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--overlay)] p-4 pt-[10vh] backdrop-blur-[1px]" onMouseDown={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={cn("w-full max-w-lg rounded-lg border bg-card shadow-xl", className)}
+        className={cn("w-full max-w-lg rounded-xl border bg-card shadow-2xl", className)}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 border-b p-4">
+        <div className="flex items-start justify-between gap-4 px-5 pt-5">
           <div>
-            <h2 className="text-lg font-semibold">{title}</h2>
-            {description && <p className="text-sm text-muted-foreground">{description}</p>}
+            <h2 className="text-[15px] font-semibold">{title}</h2>
+            {description && <p className="mt-0.5 text-[13px] text-muted-foreground">{description}</p>}
           </div>
-          <button type="button" className="rounded p-1 hover:bg-muted" onClick={onClose} aria-label="Close">
+          <button type="button" className="rounded p-1 text-muted-foreground hover:bg-muted" onClick={onClose} aria-label="Close">
             <X className="size-4" />
           </button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="p-5">{children}</div>
       </div>
     </div>
   );

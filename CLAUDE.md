@@ -14,7 +14,7 @@ React + Vite + Tailwind + shadcn/ui.
 
 - Never read, copy, log, or proxy Claude or ChatGPT auth tokens/credential files.
   Subscription access is ONLY via the official `claude`/Agent SDK and `codex` CLIs.
-- API keys live in the OS keychain, never in files, logs, or the DB.
+- API keys (and cloud storage keys) live in the OS keychain, never in files, logs, or the DB.
 - Agents may only touch files inside the selected project folder (resolve and
   check real paths; block symlink escapes).
 - Shell commands from agents go through the allow-list in packages/workspace.
@@ -44,7 +44,11 @@ packages/orchestrator  Modes: single, pipeline, swarm; task board; merge logic
 packages/workspace  Folder sandbox, git worktrees, command allow-list
 packages/testing    TestRunnerAdapter + playwright, cypress, vitest, jest, xunit, pytest
 packages/templates  Stack templates and agent role prompts
+packages/storage    BlobStore (local folder / S3-compatible), skills library (SKILL.md)
 ```
+
+Work happens through stories: plan run (read-only planner) → human edits /
+revises / approves → execution run in the chosen mode → log file + memory.
 
 Packages export their TypeScript sources directly (`exports` → `src/index.ts`);
 the server runs through `tsx` and the web app through Vite, so there is no

@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, FileDiff as FileDiffIcon, MessageSquare, Pause, Play, RotateCcw, Send, Square, Trash2, X } from "lucide-react";
+import { ArrowLeft, Check, FileText, FileDiff as FileDiffIcon, MessageSquare, Pause, Play, RotateCcw, Send, Square, Trash2, X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import type { AgentEvent, Approval, FileDiff, RunLogEvent, Task, TaskStatus, TestReport, UsageSummary } from "@appforge/core";
 import { PageHeader } from "@/components/Layout.tsx";
@@ -10,8 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.t
 import { Dialog } from "@/components/ui/dialog.tsx";
 import { Textarea } from "@/components/ui/input.tsx";
 import { Empty, ErrorNote, Tabs } from "@/components/ui/misc.tsx";
-import { RunApi, type RunDetail } from "@/lib/api.ts";
-import { href } from "@/lib/router.ts";
+import { KnowledgeApi, RunApi, type RunDetail } from "@/lib/api.ts";
+import { href, navigate } from "@/lib/router.ts";
 import { useServerMessages } from "@/lib/socket.ts";
 import { cn, timeAgo } from "@/lib/utils.ts";
 
@@ -118,11 +118,15 @@ export function RunPage({ id }: { id: string }) {
   const totalCost = usage.reduce((s, u) => s + u.costUsd, 0);
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5 p-6">
+    <div className="mx-auto max-w-[1400px] space-y-5 px-8 py-8">
       <PageHeader
         title={
           <span className="flex items-center gap-3">
-            <a href={href({ page: "project", id: project.id })} className="text-muted-foreground hover:text-foreground" aria-label="Back to project">
+            <a
+              href={href(run.storyId ? { page: "project", id: project.id, tab: "stories", item: run.storyId } : { page: "project", id: project.id, tab: "runs" })}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Back to project"
+            >
               <ArrowLeft className="size-5" />
             </a>
             <span className="truncate">{run.brief.split("\n")[0]}</span>
@@ -130,7 +134,7 @@ export function RunPage({ id }: { id: string }) {
         }
         description={
           <span className="flex flex-wrap items-center gap-2">
-            <Badge tone={statusTone(run.status)} data-testid="run-status">
+            <Badge tone={statusTone(run.status)} dot data-testid="run-status">
               {run.status}
             </Badge>
             <span>{MODES.find((m) => m.value === run.mode)?.label}</span>·<span>{project.name}</span>·<span>started {timeAgo(run.createdAt)}</span>
@@ -146,6 +150,17 @@ export function RunPage({ id }: { id: string }) {
         }
         actions={
           <>
+            <Button
+              variant="ghost"
+              onClick={() =>
+                void act(async () => {
+                  const { name } = await KnowledgeApi.saveRunLog(run.id);
+                  navigate({ page: "project", id: project.id, tab: "logs", item: name });
+                })
+              }
+            >
+              <FileText /> Log file
+            </Button>
             {(run.status === "paused" || run.status === "interrupted" || run.status === "failed") && (
               <Button onClick={() => void act(() => RunApi.resume(run.id))}>
                 {run.status === "failed" ? <RotateCcw /> : <Play />} {run.status === "failed" ? "Retry" : "Resume"}
