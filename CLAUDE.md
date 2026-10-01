@@ -30,6 +30,7 @@ React + Vite + Tailwind + shadcn/ui.
 ## Commands
 
 pnpm dev | pnpm test | pnpm lint | pnpm build
+pnpm demo (free Demo provider) | pnpm test:slow (real test runners, needs network) | pnpm desktop
 
 ## Layout
 

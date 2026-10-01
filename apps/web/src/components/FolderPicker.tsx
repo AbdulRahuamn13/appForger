@@ -1,4 +1,4 @@
-import { ChevronUp, Folder, FolderGit2, FolderPlus } from "lucide-react";
+import { ChevronUp, Folder, FolderGit2, FolderOpen, FolderPlus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Api, type DirListing } from "@/lib/api.ts";
 import { Button } from "./ui/button.tsx";
@@ -55,6 +55,16 @@ export function FolderPicker({ value, onChange }: { value: string; onChange: (pa
         <Button type="submit" variant="outline" size="sm" className="h-9">
           Go
         </Button>
+        {window.appforge?.pickFolder && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9"
+            onClick={() => void window.appforge?.pickFolder().then((picked) => (picked ? open(picked) : undefined))}
+          >
+            <FolderOpen /> Choose…
+          </Button>
+        )}
       </form>
       {listing && (
         <div className="flex flex-wrap gap-1">

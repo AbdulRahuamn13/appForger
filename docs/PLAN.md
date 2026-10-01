@@ -145,6 +145,16 @@ How it fits the flow:
   trace/screenshot path) for a bounded number of fix loops (default 3).
 - Optional: generate a GitHub Actions workflow that runs the same commands in CI.
 
+## Build status
+
+All seven phases are implemented; see the README for how to run them. Verified here:
+project creation + restart (browser), one real prompt through Claude Code, a real
+single-agent run through Claude Code (write → allow-listed command → review →
+approval → merge), demo pipeline and 3-coder swarm runs in the browser, real
+Vitest/pytest/Playwright runs against a scaffolded app, and the Electron wrapper
+under Xvfb. Codex CLI, the API-key adapters, Cypress and xUnit are covered by
+contract tests against fake binaries/servers and sample reports, not live runs.
+
 ## Build plan: seven phases, each a Claude Code session with a clear finish line
 
 Run each phase in plan mode first, approve the plan, then let it build. Commit at

@@ -11,9 +11,12 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @appforge/server --filter @appforge/web dev",
     "start": "pnpm --filter @appforge/web build && pnpm --filter @appforge/server start",
+    "demo": "pnpm --filter @appforge/web build && pnpm --filter @appforge/server start --demo",
+    "desktop": "pnpm --filter @appforge/desktop start",
     "build": "pnpm typecheck && pnpm --filter @appforge/web build",
     "typecheck": "pnpm -r --parallel typecheck",
     "test": "vitest run",
+    "test:slow": "node -e \"process.env.APPFORGE_SLOW_TESTS='1'; require('child_process').execSync('vitest run', { stdio: 'inherit', env: process.env })\"",
     "lint": "eslint ."
   },
   "devDependencies": {

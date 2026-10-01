@@ -11,4 +11,10 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
     },
   },
+  {
+    files: ["apps/desktop/**/*.{mjs,cjs}"],
+    languageOptions: { globals: { process: "readonly", console: "readonly", fetch: "readonly", setTimeout: "readonly", require: "readonly" } },
+  },
+  // Electron's sandboxed preload must be CommonJS.
+  { files: ["apps/desktop/preload.cjs"], rules: { "@typescript-eslint/no-require-imports": "off" } },
 );
