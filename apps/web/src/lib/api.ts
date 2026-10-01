@@ -1,4 +1,17 @@
-import type { Project, ProjectSettings, ProjectShape, UnitFramework } from "@appforge/core";
+import type {
+  AgentEvent,
+  Approval,
+  FileDiff,
+  Project,
+  ProjectSettings,
+  ProjectShape,
+  Run,
+  RunLogEvent,
+  RunMode,
+  Task,
+  UnitFramework,
+  UsageSummary,
+} from "@appforge/core";
 
 export class ApiError extends Error {
   constructor(
@@ -85,4 +98,32 @@ export const ProviderApi = {
   playground: (body: { provider: string; model?: string; prompt: string; projectId?: string }) =>
     api<{ id: string; cwd: string }>("/api/playground", { body }),
   stopPlayground: (id: string) => api<{ ok: true }>(`/api/playground/${id}/stop`, { method: "POST", body: {} }),
+};
+
+
+export interface RunDetail {
+  run: Run;
+  project: Project;
+  tasks: Task[];
+  approvals: Approval[];
+  logs: RunLogEvent[];
+  active: boolean;
+}
+
+export const RunApi = {
+  list: (projectId: string) => api<Run[]>(`/api/projects/${projectId}/runs`),
+  create: (projectId: string, body: { mode: RunMode; brief: string; repo?: string }) => api<Run>(`/api/projects/${projectId}/runs`, { body }),
+  get: (runId: string) => api<RunDetail>(`/api/runs/${runId}`),
+  events: (runId: string, after = 0) => api<{ seq: number; event: AgentEvent }[]>(`/api/runs/${runId}/events?after=${after}`),
+  usage: (runId: string) => api<UsageSummary[]>(`/api/runs/${runId}/usage`),
+  stop: (runId: string) => api<{ stopped: boolean }>(`/api/runs/${runId}/stop`, { body: {} }),
+  resume: (runId: string) => api<Run>(`/api/runs/${runId}/resume`, { body: {} }),
+  message: (runId: string, text: string) => api<{ ok: true }>(`/api/runs/${runId}/message`, { body: { text } }),
+  finish: (runId: string) => api<{ ok: true }>(`/api/runs/${runId}/finish`, { body: {} }),
+  discard: (runId: string) => api<{ ok: true }>(`/api/runs/${runId}/discard`, { body: {} }),
+  decide: (approvalId: string, approved: boolean, comment?: string) =>
+    api<Approval>(`/api/approvals/${approvalId}`, { body: { approved, ...(comment ? { comment } : {}) } }),
+  approvalDiff: (approvalId: string) => api<FileDiff[]>(`/api/approvals/${approvalId}/diff`),
+  taskDiff: (taskId: string) => api<FileDiff[]>(`/api/tasks/${taskId}/diff`),
+  kill: () => api<{ runs: number; processes: number }>("/api/kill", { body: {} }),
 };

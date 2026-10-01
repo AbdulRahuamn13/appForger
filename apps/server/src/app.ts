@@ -4,13 +4,16 @@ import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
+import { Orchestrator, type TestingService } from "@appforge/orchestrator";
 import { createDefaultRegistry, KeychainSecretStore, type ProviderRegistry, type SecretStore } from "@appforge/providers";
+import { ProcessRegistry } from "@appforge/workspace";
 import type { AppContext } from "./context.ts";
 import { Store } from "./db/store.ts";
 import { Hub } from "./hub.ts";
 import { fsRoutes } from "./routes/fs.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { providerRoutes } from "./routes/providers.ts";
+import { runRoutes } from "./routes/runs.ts";
 
 export interface BuildOptions {
   dataDir: string;
@@ -23,6 +26,7 @@ export interface BuildOptions {
   providers?: ProviderRegistry;
   /** Register the free "demo" provider (canned output) for trying runs without an account. */
   demo?: boolean;
+  testing?: TestingService;
 }
 
 export interface Built {
@@ -38,7 +42,11 @@ export async function buildApp(options: BuildOptions): Promise<Built> {
   const hub = new Hub();
   const secrets = options.secrets ?? new KeychainSecretStore();
   const providers = options.providers ?? createDefaultRegistry(secrets, { demo: options.demo ?? false });
-  const ctx: AppContext = { store, hub, dataDir: options.dataDir, providers, secrets };
+  const processes = new ProcessRegistry();
+  const orchestrator = new Orchestrator({ store, providers, emit: (m) => hub.broadcast(m), processes, ...(options.testing ? { testing: options.testing } : {}) });
+  const interrupted = orchestrator.recover();
+  if (interrupted) app.log.info(`${interrupted} run(s) were interrupted by a restart; resume them from the UI`);
+  const ctx: AppContext = { store, hub, dataDir: options.dataDir, providers, secrets, processes, orchestrator };
 
   // AppForge runs commands on this machine: only answer local pages, which
   // blocks DNS-rebinding and cross-site requests from other origins.
@@ -57,7 +65,10 @@ export async function buildApp(options: BuildOptions): Promise<Built> {
     }
   });
 
-  app.addHook("onClose", async () => store.close());
+  app.addHook("onClose", async () => {
+    ctx.orchestrator.killAll();
+    store.close();
+  });
 
   await app.register(fastifyWebsocket);
   app.get("/ws", { websocket: true }, (socket) => hub.add(socket));
@@ -66,6 +77,7 @@ export async function buildApp(options: BuildOptions): Promise<Built> {
   fsRoutes(app);
   projectRoutes(app, ctx);
   providerRoutes(app, ctx);
+  runRoutes(app, ctx, orchestrator);
 
   const webDist = options.webDist ?? defaultWebDist();
   if (existsSync(path.join(webDist, "index.html"))) {

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { simpleGit, type SimpleGit } from "simple-git";
@@ -111,13 +112,20 @@ export class GitRepo {
     }
   }
 
-  /** Stage everything and commit. Returns the new sha, or undefined if there was nothing to commit. */
-  async commitAll(message: string): Promise<string | undefined> {
-    await this.git.add(["-A"]);
-    const status = await this.git.status();
-    if (status.staged.length === 0 && status.files.length === 0) return undefined;
-    const result = await this.git.commit(message);
-    return result.commit || (await this.headSha());
+  /**
+   * Stage everything (or only `paths`) and commit. Returns the new sha, or
+   * undefined if there was nothing to commit.
+   */
+  async commitAll(message: string, paths?: string[]): Promise<string | undefined> {
+    if (paths) {
+      paths = paths.filter((p) => existsSync(path.join(this.dir, p)));
+      if (!paths.length) return undefined;
+      await this.git.raw(["add", "-A", "--", ...paths]);
+    } else await this.git.add(["-A"]);
+    const staged = (await this.git.raw(["diff", "--cached", "--name-only"])).trim();
+    if (!staged) return undefined;
+    await this.git.raw(["commit", "-m", message, ...(paths ? ["--", ...paths] : [])]);
+    return this.headSha();
   }
 
   /** Files changed in the working tree relative to HEAD, including untracked ones. */

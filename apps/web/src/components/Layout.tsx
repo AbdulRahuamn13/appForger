@@ -1,5 +1,6 @@
-import { Boxes, Hammer, KeyRound } from "lucide-react";
-import type { ReactNode } from "react";
+import { Boxes, Hammer, KeyRound, OctagonX } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { RunApi } from "@/lib/api.ts";
 import { href, type Route } from "@/lib/router.ts";
 import { useSocketStatus } from "@/lib/socket.ts";
 import { cn } from "@/lib/utils.ts";
@@ -34,7 +35,8 @@ export function Layout({ route, children, headerRight }: { route: Route; childre
             </a>
           ))}
         </nav>
-        <div className="mt-auto flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
+        <KillSwitch />
+        <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
           <span className={cn("size-2 rounded-full", connected ? "bg-success" : "bg-destructive")} />
           {connected ? "Live" : "Reconnecting…"}
         </div>
@@ -55,6 +57,33 @@ export function PageHeader({ title, description, actions }: { title: ReactNode; 
         {description && <div className="mt-1 text-sm text-muted-foreground">{description}</div>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+/** Global kill switch: stops every run, agent session and child process. */
+function KillSwitch() {
+  const [note, setNote] = useState<string>();
+  const kill = async () => {
+    if (!confirm("Stop every running agent, test runner and dev server?")) return;
+    try {
+      const res = await RunApi.kill();
+      setNote(`Stopped ${res.runs} run(s), ${res.processes} process(es)`);
+    } catch (err) {
+      setNote((err as Error).message);
+    }
+    setTimeout(() => setNote(undefined), 5_000);
+  };
+  return (
+    <div className="mt-auto px-2">
+      <button
+        type="button"
+        onClick={() => void kill()}
+        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10"
+      >
+        <OctagonX className="size-4" /> Kill switch
+      </button>
+      {note && <p className="px-3 pb-1 text-xs text-muted-foreground">{note}</p>}
     </div>
   );
 }

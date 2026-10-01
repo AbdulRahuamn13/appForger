@@ -66,7 +66,7 @@ export function projectRoutes(app: FastifyInstance, ctx: AppContext): void {
   app.delete<{ Params: { id: string } }>("/api/projects/:id", async (req, reply) => {
     const project = ctx.store.getProject(req.params.id);
     if (!project) return reply.code(404).send({ error: "Project not found" });
-    if (ctx.orchestrator?.hasActiveRuns(project.id)) return reply.code(409).send({ error: "Stop the project's active runs first" });
+    if (ctx.orchestrator.hasActiveRuns(project.id)) return reply.code(409).send({ error: "Stop the project's active runs first" });
     ctx.store.deleteProject(project.id);
     return { ok: true };
   });

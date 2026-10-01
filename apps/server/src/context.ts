@@ -1,11 +1,8 @@
+import type { Orchestrator } from "@appforge/orchestrator";
 import type { ProviderRegistry, SecretStore } from "@appforge/providers";
+import type { ProcessRegistry } from "@appforge/workspace";
 import type { Store } from "./db/store.ts";
 import type { Hub } from "./hub.ts";
-
-/** The subset of the run controller other routes need. */
-export interface RunControl {
-  hasActiveRuns(projectId: string): boolean;
-}
 
 export interface AppContext {
   store: Store;
@@ -13,5 +10,6 @@ export interface AppContext {
   dataDir: string;
   providers: ProviderRegistry;
   secrets: SecretStore;
-  orchestrator?: RunControl;
+  processes: ProcessRegistry;
+  orchestrator: Orchestrator;
 }

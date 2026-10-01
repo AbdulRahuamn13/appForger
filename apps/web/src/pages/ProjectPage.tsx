@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { Project } from "@appforge/core";
 import { PageHeader } from "@/components/Layout.tsx";
 import { ProjectSettingsForm, type ProviderOption } from "@/components/ProjectSettingsForm.tsx";
+import { RunsPanel } from "@/components/RunsPanel.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
@@ -21,7 +22,7 @@ const FALLBACK_PROVIDERS: ProviderOption[] = [
 export function ProjectPage({ id }: { id: string }) {
   const [project, setProject] = useState<Project>();
   const [error, setError] = useState<string>();
-  const [tab, setTab] = useState<"runs" | "settings">("settings");
+  const [tab, setTab] = useState<"runs" | "settings">("runs");
   const [providers, setProviders] = useState<ProviderOption[]>(FALLBACK_PROVIDERS);
 
   useEffect(() => {
@@ -84,7 +85,7 @@ export function ProjectPage({ id }: { id: string }) {
               onSave={async (settings) => setProject(await Api.updateProject(project.id, { settings }))}
             />
           ) : (
-            <p className="text-sm text-muted-foreground">Runs arrive with the orchestrator.</p>
+            <RunsPanel project={project} />
           )}
         </CardContent>
       </Card>
