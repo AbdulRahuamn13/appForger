@@ -1,0 +1,22 @@
+{
+  "name": "@appforge/workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@appforge/core": "workspace:*",
+    "execa": "^10.0.1",
+    "picomatch": "^4.0.3",
+    "simple-git": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/picomatch": "^4.0.2"
+  }
+}

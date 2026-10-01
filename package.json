@@ -1,0 +1,27 @@
+{
+  "name": "appforge",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local, single-user tool that orchestrates coding agents to build full-stack apps in a folder you choose.",
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @appforge/server --filter @appforge/web dev",
+    "start": "pnpm --filter @appforge/web build && pnpm --filter @appforge/server start",
+    "build": "pnpm typecheck && pnpm --filter @appforge/web build",
+    "typecheck": "pnpm -r --parallel typecheck",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^22.15.0",
+    "eslint": "^10.0.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  }
+}
