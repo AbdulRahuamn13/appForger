@@ -116,7 +116,7 @@ export default defineConfig({
   server: {
     proxy: { "/api": process.env.API_URL ?? "http://127.0.0.1:3000" },
   },
-  test: { environment: "jsdom" },
+  test: { environment: "jsdom", exclude: ["e2e/**", "cypress/**", "node_modules/**"] },
 });
 `,
     "tsconfig.json": json({
@@ -188,6 +188,7 @@ const express: StackPart = {
       devDependencies: {
         "@types/cors": "^2.8.19",
         "@types/express": "^5.0.6",
+        "@types/node": "^22.15.0",
         "@types/supertest": "^7.2.1",
         supertest: "^7.3.0",
         tsx: "^4.23.15",
@@ -202,6 +203,7 @@ const express: StackPart = {
         moduleResolution: "NodeNext",
         strict: true,
         noEmit: true,
+        allowImportingTsExtensions: true,
         skipLibCheck: true,
         types: ["node"],
       },
@@ -286,6 +288,7 @@ const aspnet: StackPart = {
     "Unit tests live in backend/Api.Tests (xUnit) and reference Api via WebApplicationFactory where useful.",
   ].join("\n"),
   files: () => ({
+    ".gitignore": "bin/\nobj/\nTestResults/\n",
     "Api/Api.csproj": `<Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>

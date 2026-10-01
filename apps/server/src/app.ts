@@ -6,6 +6,7 @@ import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 import { Orchestrator, type TestingService } from "@appforge/orchestrator";
 import { createDefaultRegistry, KeychainSecretStore, type ProviderRegistry, type SecretStore } from "@appforge/providers";
+import { ProjectTesting } from "@appforge/testing";
 import { ProcessRegistry } from "@appforge/workspace";
 import type { AppContext } from "./context.ts";
 import { Store } from "./db/store.ts";
@@ -43,10 +44,11 @@ export async function buildApp(options: BuildOptions): Promise<Built> {
   const secrets = options.secrets ?? new KeychainSecretStore();
   const providers = options.providers ?? createDefaultRegistry(secrets, { demo: options.demo ?? false });
   const processes = new ProcessRegistry();
-  const orchestrator = new Orchestrator({ store, providers, emit: (m) => hub.broadcast(m), processes, ...(options.testing ? { testing: options.testing } : {}) });
+  const testing = new ProjectTesting(processes);
+  const orchestrator = new Orchestrator({ store, providers, emit: (m) => hub.broadcast(m), processes, testing: options.testing ?? testing });
   const interrupted = orchestrator.recover();
   if (interrupted) app.log.info(`${interrupted} run(s) were interrupted by a restart; resume them from the UI`);
-  const ctx: AppContext = { store, hub, dataDir: options.dataDir, providers, secrets, processes, orchestrator };
+  const ctx: AppContext = { store, hub, dataDir: options.dataDir, providers, secrets, processes, testing, orchestrator };
 
   // AppForge runs commands on this machine: only answer local pages, which
   // blocks DNS-rebinding and cross-site requests from other origins.

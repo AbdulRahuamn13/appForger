@@ -69,7 +69,8 @@ export const Api = {
   project: (id: string) => api<Project>(`/api/projects/${id}`),
   createProject: (body: CreateProjectBody) => api<Project>("/api/projects", { body }),
   updateProject: (id: string, body: { name?: string; settings?: Partial<ProjectSettings> }) =>
-    api<Project>(`/api/projects/${id}`, { method: "PATCH", body }),
+    api<Project & { scaffolded?: string[] }>(`/api/projects/${id}`, { method: "PATCH", body }),
+  writeCi: (id: string) => api<{ written: string[] }>(`/api/projects/${id}/ci`, { method: "POST", body: {} }),
   deleteProject: (id: string) => api<{ ok: true }>(`/api/projects/${id}`, { method: "DELETE" }),
   scaffold: (id: string) => api<{ written: string[] }>(`/api/projects/${id}/scaffold`, { method: "POST", body: {} }),
 };

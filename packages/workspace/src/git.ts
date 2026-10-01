@@ -8,6 +8,20 @@ const AUTHOR = { name: "AppForge", email: "appforge@localhost" };
 /** Folder (inside each repo) for AppForge's worktrees and scratch files; never committed. */
 export const APPFORGE_DIR = ".appforge";
 
+export const LOCAL_EXCLUDES = [
+  `${APPFORGE_DIR}/`,
+  "node_modules/",
+  ".venv/",
+  "__pycache__/",
+  ".pytest_cache/",
+  "test-results/",
+  "playwright-report/",
+  "blob-report/",
+  "TestResults/",
+  "cypress/videos/",
+  "cypress/screenshots/",
+];
+
 export interface ChangedFile {
   path: string;
   status: "added" | "modified" | "deleted" | "renamed" | "untracked";
@@ -37,7 +51,8 @@ export class GitRepo {
     if (!(await repo.isRepoRoot())) {
       await repo.git.init(["--initial-branch=main"]);
     }
-    await repo.ensureExcluded(`${APPFORGE_DIR}/`);
+    // Tool output that must never be committed or count as an agent's change.
+    for (const pattern of LOCAL_EXCLUDES) await repo.ensureExcluded(pattern);
     // Commits need an identity; only set a repo-local one if the user has none.
     const email = await repo.git.raw(["config", "--get", "user.email"]).catch(() => "");
     if (!email.trim()) {

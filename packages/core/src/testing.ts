@@ -11,6 +11,16 @@ export interface TestRunOptions {
   env?: Record<string, string>;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Progress lines (dependency installs, retries). */
+  log?: (message: string) => void;
+}
+
+export interface TestCommand {
+  file: string;
+  args: string[];
+  env?: Record<string, string>;
+  /** Where the machine-readable report lands, relative to the run directory (a file, or a folder of files). */
+  reportPath: string;
 }
 
 /** Raw output of a runner process, before parsing. */
@@ -18,8 +28,8 @@ export interface RawTestOutput {
   exitCode: number | undefined;
   stdout: string;
   stderr: string;
-  /** Contents of the machine-readable report file, if the runner wrote one. */
-  reportFile?: string;
+  /** Contents of the machine-readable report file(s) the runner wrote. */
+  reportFiles: string[];
   durationMs: number;
 }
 
@@ -34,7 +44,7 @@ export interface TestRunnerAdapter {
   /** Write config/dependency stubs so the framework is ready to run. Idempotent. */
   scaffold(dir: string): Promise<{ filesWritten: string[]; installCommand?: string }>;
   /** Shell command the orchestrator runs (also used for the generated CI workflow). */
-  command(options: Pick<TestRunOptions, "filter" | "baseUrl">): { file: string; args: string[]; reportPath: string };
+  command(options: Pick<TestRunOptions, "filter" | "baseUrl">): TestCommand;
   run(options: TestRunOptions): Promise<TestReport>;
   parseResults(raw: RawTestOutput, cwd: string): TestReport;
 }

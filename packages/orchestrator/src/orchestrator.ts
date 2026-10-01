@@ -862,7 +862,7 @@ export class Orchestrator {
 
       ar.spentUsd += result.costUsd;
       const violations = call.policyRepo
-        ? await enforceWritePolicy(new GitRepo(call.policyRepo), access, call.ownership ?? [], [...TOOLING_SIDE_EFFECTS, `${APPFORGE_DIR}/**`])
+        ? await enforceWritePolicy(new GitRepo(call.policyRepo), access, call.ownership ?? [], [...TOOLING_SIDE_EFFECTS, `**/${APPFORGE_DIR}/**`])
         : [];
       for (const v of violations) this.log(ar, "warn", `${agentId}: reverted ${v.path} (${v.reason})`, call.task?.id);
 

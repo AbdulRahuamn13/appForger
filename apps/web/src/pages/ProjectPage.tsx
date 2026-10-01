@@ -82,7 +82,12 @@ export function ProjectPage({ id }: { id: string }) {
             <ProjectSettingsForm
               project={project}
               providers={providers}
-              onSave={async (settings) => setProject(await Api.updateProject(project.id, { settings }))}
+              onSave={async (settings) => {
+                const { scaffolded, ...updated } = await Api.updateProject(project.id, { settings });
+                setProject(updated);
+                return scaffolded;
+              }}
+              onWriteCi={async () => (await Api.writeCi(project.id)).written}
             />
           ) : (
             <RunsPanel project={project} />

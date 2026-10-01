@@ -69,6 +69,12 @@ export class ProcessRegistry {
     killTree(child);
   }
 
+  /** Kill a process tree and wait (bounded) for it to exit. */
+  async stopAndWait(child: ResultPromise, timeoutMs = 10_000): Promise<void> {
+    killTree(child);
+    await Promise.race([child.then(() => undefined, () => undefined), new Promise((r) => setTimeout(r, timeoutMs).unref())]);
+  }
+
   killAll(): number {
     const count = this.live.size;
     for (const child of this.live) killTree(child);

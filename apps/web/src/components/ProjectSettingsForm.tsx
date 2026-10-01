@@ -24,15 +24,18 @@ export function ProjectSettingsForm({
   project,
   providers,
   onSave,
+  onWriteCi,
 }: {
   project: Project;
   providers: ProviderOption[];
-  onSave: (settings: ProjectSettings) => Promise<void>;
+  onSave: (settings: ProjectSettings) => Promise<string[] | undefined>;
+  onWriteCi?: () => Promise<string[]>;
 }) {
   const [draft, setDraft] = useState<ProjectSettings>(project.settings);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [saved, setSaved] = useState(false);
+  const [note, setNote] = useState<string>();
   useEffect(() => setDraft(project.settings), [project.settings]);
 
   const set = <K extends keyof ProjectSettings>(key: K, value: ProjectSettings[K]) => {
@@ -52,8 +55,9 @@ export function ProjectSettingsForm({
     setBusy(true);
     setError(undefined);
     try {
-      await onSave(draft);
+      const scaffolded = await onSave(draft);
       setSaved(true);
+      setNote(scaffolded?.length ? `Scaffolded and committed: ${scaffolded.join(", ")}` : undefined);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -105,7 +109,7 @@ export function ProjectSettingsForm({
         </div>
       </section>
       <section className="grid gap-4 sm:grid-cols-3">
-        <Field label="E2E framework">
+        <Field label="E2E framework" hint="Switching scaffolds the new framework's config and a smoke test.">
           <Select value={draft.e2e} onChange={(e) => set("e2e", e.target.value as ProjectSettings["e2e"])}>
             {E2E_FRAMEWORKS.map((f) => (
               <option key={f}>{f}</option>
@@ -160,7 +164,22 @@ export function ProjectSettingsForm({
           {busy ? "Saving…" : "Save settings"}
         </Button>
         {saved && <span className="text-sm text-success">Saved</span>}
+        {onWriteCi && (
+          <Button
+            variant="outline"
+            className="ml-auto"
+            onClick={() =>
+              void onWriteCi().then(
+                (files) => setNote(files.length ? `Wrote ${files.join(", ")}` : "No test frameworks configured"),
+                (e: Error) => setError(e.message),
+              )
+            }
+          >
+            Generate GitHub Actions workflow
+          </Button>
+        )}
       </div>
+      {note && <p className="text-xs text-muted-foreground">{note}</p>}
     </div>
   );
 }

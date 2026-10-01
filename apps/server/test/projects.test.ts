@@ -95,6 +95,35 @@ describe("projects API", () => {
   });
 });
 
+describe("test framework scaffolding", () => {
+  it("switching Playwright ↔ Cypress changes what gets scaffolded, and CI mirrors it", async () => {
+    const { app } = await buildApp({ dataDir: tmp, dbFile: ":memory:" });
+    const folder = path.join(tmp, "e2e-switch");
+    const created = (
+      await app.inject({ method: "POST", url: "/api/projects", payload: { name: "Switch", path: folder, shape: "monorepo", stackId: "node-react", scaffold: true } })
+    ).json<Project>();
+    expect(existsSync(path.join(folder, "frontend/playwright.config.ts"))).toBe(true);
+    expect(existsSync(path.join(folder, "frontend/e2e/smoke.spec.ts"))).toBe(true);
+    expect(existsSync(path.join(folder, "frontend/cypress.config.ts"))).toBe(false);
+
+    const res = await app.inject({ method: "PATCH", url: `/api/projects/${created.id}`, payload: { settings: { e2e: "cypress" } } });
+    const body = res.json<Project & { scaffolded: string[] }>();
+    expect(body.scaffolded).toEqual(expect.arrayContaining(["frontend/cypress.config.ts", "frontend/cypress/e2e/smoke.cy.ts"]));
+    const pkg = JSON.parse(await readFile(path.join(folder, "frontend/package.json"), "utf8")) as { devDependencies: Record<string, string> };
+    expect(pkg.devDependencies.cypress).toBeDefined();
+    const repo = new GitRepo(folder);
+    expect(await repo.changedFiles()).toEqual([]);
+    expect((await repo.log(1))[0]?.message).toBe("chore: scaffold cypress (AppForge)");
+
+    const ci = await app.inject({ method: "POST", url: `/api/projects/${created.id}/ci` });
+    expect(ci.json<{ written: string[] }>().written).toEqual([".github/workflows/appforge-ci.yml"]);
+    const workflow = await readFile(path.join(folder, ".github/workflows/appforge-ci.yml"), "utf8");
+    expect(workflow).toContain("cypress run");
+    expect(workflow).toContain("vitest run");
+    await app.close();
+  });
+});
+
 describe("folder browser and guards", () => {
   it("lists folders and creates new ones", async () => {
     const { app } = await buildApp({ dataDir: tmp, dbFile: ":memory:" });

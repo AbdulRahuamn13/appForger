@@ -25,6 +25,8 @@ export function projectRoutes(app: FastifyInstance, ctx: AppContext): void {
   app.post<{ Body: CreateProjectInput }>("/api/projects", async (req, reply) => {
     try {
       const project = await createProject(req.body, ctx.store.listProjects());
+      // Starter files come with the chosen test frameworks ready to run.
+      if (req.body.scaffold && project.stackId !== "custom") await ctx.testing.scaffold(project);
       ctx.store.insertProject(project);
       ctx.hub.broadcast({ kind: "project-updated", project });
       return reply.code(201).send(project);
@@ -40,6 +42,7 @@ export function projectRoutes(app: FastifyInstance, ctx: AppContext): void {
       const project = ctx.store.getProject(req.params.id);
       if (!project) return reply.code(404).send({ error: "Project not found" });
       if (req.body.name?.trim()) project.name = req.body.name.trim();
+      const before = { ...project.settings };
       if (req.body.settings) {
         const s = req.body.settings;
         project.settings = {
@@ -52,7 +55,15 @@ export function projectRoutes(app: FastifyInstance, ctx: AppContext): void {
       }
       ctx.store.updateProject(project);
       ctx.hub.broadcast({ kind: "project-updated", project });
-      return project;
+      // Switching frameworks (e.g. Playwright → Cypress) scaffolds the new one right away.
+      const layers: ("unit" | "e2e")[] = [];
+      if (project.settings.e2e !== before.e2e) layers.push("e2e");
+      if (project.settings.unitBackend !== before.unitBackend || project.settings.unitFrontend !== before.unitFrontend) layers.push("unit");
+      let scaffolded: string[] = [];
+      if (layers.length && project.stackId !== "custom" && !ctx.orchestrator.hasActiveRuns(project.id)) {
+        scaffolded = await ctx.testing.scaffold(project, layers);
+      }
+      return { ...project, scaffolded };
     },
   );
 
@@ -60,6 +71,13 @@ export function projectRoutes(app: FastifyInstance, ctx: AppContext): void {
     const project = ctx.store.getProject(req.params.id);
     if (!project) return reply.code(404).send({ error: "Project not found" });
     return { written: await scaffoldProject(project) };
+  });
+
+  /** Optional: a GitHub Actions workflow running the same test commands. */
+  app.post<{ Params: { id: string } }>("/api/projects/:id/ci", async (req, reply) => {
+    const project = ctx.store.getProject(req.params.id);
+    if (!project) return reply.code(404).send({ error: "Project not found" });
+    return { written: await ctx.testing.writeCiWorkflow(project) };
   });
 
   /** Forget the project (files on disk are left alone). */
