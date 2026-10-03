@@ -3,5 +3,8 @@ packages:
   - packages/*
 
 onlyBuiltDependencies:
-  - better-sqlite3
   - esbuild
+
+# better-sqlite3 ships N-API prebuilds; skip pnpm's implicit node-gyp rebuild.
+ignoredBuiltDependencies:
+  - better-sqlite3
